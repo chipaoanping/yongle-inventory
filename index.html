@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
-<meta name="theme-color" content="#0f7a68">
+<meta name="theme-color" content="#f3ebdd">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-title" content="永樂庫存">
@@ -13,7 +13,7 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="apple-touch-icon" href="icon-180.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&family=Noto+Serif+TC:wght@600;700;900&display=swap">
 <style>
 :root{padding-top:env(safe-area-inset-top,0px);padding-bottom:0}
 body{margin:0}
@@ -21,27 +21,28 @@ img{max-width:100%}
 
 /* Layout: a phone app. Sticky top bar, one scrolling screen per tab, fixed bottom nav with a raised 售出 button in the middle. */
 :root{
-  --bg:#f3f5f4; --surface:#ffffff; --surface-2:#eaefed; --ink:#14231f; --muted:#65766f; --line:#dfe6e3;
-  --accent:#0f7a68; --accent-ink:#ffffff; --accent-soft:#d8efe9;
-  --warn:#b45309; --warn-soft:#fdefd9; --bad:#c02c1d; --bad-soft:#fde4e1; --good:#1d7f3e; --good-soft:#dcf3e3;
-  --b1:#c2410c; --b1s:#ffe8d9; --b2:#be185d; --b2s:#fde3ef; --b3:#6d28d9; --b3s:#ece4fd; --b4:#0369a1; --b4s:#dcf0fb; --b5:#4d7c0f; --b5s:#e9f5d6;
-  --shadow:0 1px 2px rgba(20,35,31,.06),0 4px 14px rgba(20,35,31,.06);
-  --scrim:rgba(10,20,18,.45);
+  --bg:#f3ebdd; --surface:#fffaf1; --surface-2:#efe4d2; --ink:#3b2a1f; --muted:#86705e; --line:#e3d5bf;
+  --accent:#a8322d; --accent-ink:#fffaf1; --accent-soft:#f6ddd6;
+  --warn:#a86b12; --warn-soft:#f8e8c6; --bad:#b3261e; --bad-soft:#f9dcd7; --good:#3f7564; --good-soft:#dcebe3;
+  --b1:#a8322d; --b1s:#f6ddd6; --b2:#3f7564; --b2s:#dcebe3; --b3:#a86b12; --b3s:#f8e8c6; --b4:#7a4b6e; --b4s:#efdfea; --b5:#5a3e2b; --b5s:#eadccb;
+  --shadow:0 1px 0 rgba(90,62,43,.06),0 6px 18px rgba(90,62,43,.08);
+  --scrim:rgba(40,25,15,.45);
+  --f-head:"Noto Serif TC","Songti TC",serif;
   --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
   --nav-h:64px;
 }
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
-  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
-  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
-  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
-  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
-  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+  --bg:#1c1511; --surface:#28201a; --surface-2:#332920; --ink:#f2e7d6; --muted:#b39e88; --line:#3f3328;
+  --accent:#e2786c; --accent-ink:#1c1511; --accent-soft:#4a2622;
+  --warn:#e9b45a; --warn-soft:#3d2e14; --bad:#f08a7f; --bad-soft:#45201c; --good:#8cc4ae; --good-soft:#1e352c;
+  --b1:#e2786c; --b1s:#4a2622; --b2:#8cc4ae; --b2s:#1e352c; --b3:#e9b45a; --b3s:#3d2e14; --b4:#d6a3c8; --b4s:#3a2534; --b5:#d8b99a; --b5s:#3a2c20;
+  --shadow:0 1px 2px rgba(0,0,0,.45); --scrim:rgba(0,0,0,.6); color-scheme:dark}}
 :root[data-theme="dark"]{
-  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
-  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
-  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
-  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
-  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}
+  --bg:#1c1511; --surface:#28201a; --surface-2:#332920; --ink:#f2e7d6; --muted:#b39e88; --line:#3f3328;
+  --accent:#e2786c; --accent-ink:#1c1511; --accent-soft:#4a2622;
+  --warn:#e9b45a; --warn-soft:#3d2e14; --bad:#f08a7f; --bad-soft:#45201c; --good:#8cc4ae; --good-soft:#1e352c;
+  --b1:#e2786c; --b1s:#4a2622; --b2:#8cc4ae; --b2s:#1e352c; --b3:#e9b45a; --b3s:#3d2e14; --b4:#d6a3c8; --b4s:#3a2534; --b5:#d8b99a; --b5s:#3a2c20;
+  --shadow:0 1px 2px rgba(0,0,0,.45); --scrim:rgba(0,0,0,.6); color-scheme:dark}
 *{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 [hidden]{display:none!important}
 body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
@@ -149,7 +150,7 @@ button.stat{cursor:pointer}
 .nav button{border:0;background:transparent;font:inherit;font-size:11px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;cursor:pointer;justify-content:center}
 .nav button[aria-selected="true"]{color:var(--accent)}
 .nav .fab{position:relative}
-.nav .fab span.ring{width:60px;height:60px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin-top:-30px;box-shadow:0 6px 18px rgba(15,122,104,.35);border:4px solid var(--surface)}
+.nav .fab span.ring{width:60px;height:60px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin-top:-30px;box-shadow:0 6px 18px rgba(168,50,45,.35);border:4px solid var(--surface)}
 .nav .fab span.ring svg{width:28px;height:28px}
 
 /* sheets */
@@ -209,11 +210,31 @@ td.n,th.n{text-align:right}
 .gform{display:flex;flex-direction:column;gap:12px}
 .linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-weight:700;padding:8px;cursor:pointer}
 
+/* 旗時 look: old photo-studio paper, qipao red, serif headings, small ornaments */
+body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.05) 1px,transparent 1px);background-size:6px 6px}
+.top{background:linear-gradient(var(--bg) 80%,transparent)}
+.top h1,.gatebox h1,.sheet h2,.hero b,.stat .v,.month b,.qty,.amt{font-family:var(--f-head);letter-spacing:.03em}
+.top h1{font-size:24px}
+.kicker{font-size:11px;font-weight:700;letter-spacing:.18em;color:var(--accent)}
+.kicker::before{content:"❀ "}
+.card,.stat,.menu,.scard,.month,.empty,.search,.chip{border:1px solid var(--line)}
+.card,.scard,.menu{border-radius:14px}
+.section-h{font-family:var(--f-head);color:var(--ink);font-size:15px;letter-spacing:.06em}
+.section-h::before{content:"⟡";color:var(--accent);font-family:var(--f-body)}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.chips#catChips .chip[aria-pressed="true"]{border-color:var(--accent)}
+.hero{background:var(--accent);position:relative;overflow:hidden;border:2px solid var(--accent);box-shadow:inset 0 0 0 4px var(--accent),inset 0 0 0 5px rgba(255,250,241,.55)}
+.av{border-radius:50%} .av.img{border-radius:12px;border:1px solid var(--line)}
+.sell,.btn.primary{box-shadow:0 2px 0 rgba(90,62,43,.18)}
+.nav{background:var(--surface);box-shadow:0 -4px 16px rgba(90,62,43,.06)}
+.sheet{border-top:3px solid var(--accent)}
+.sheet::before{background:var(--accent);opacity:.35}
+.gatebox h1::after{content:"✿ 寄售庫存 ✿";display:block;font-family:var(--f-body);font-size:13px;letter-spacing:.2em;color:var(--accent);margin-top:4px;font-weight:700}
 </style>
 </head>
 <body>
 <header class="top">
-  <div><h1>永樂庫存</h1><div class="sub" id="screenTitle">商品</div></div>
+  <div><div class="kicker">旗時 · 永樂市場 2F</div><h1>永樂庫存</h1><div class="sub" id="screenTitle">商品</div></div>
   <span class="grow"></span>
   <span class="sync" id="conn">連線中</span>
 </header>
