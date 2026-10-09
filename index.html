@@ -1114,7 +1114,7 @@ function renderStaff(){
   const box=$("#staffBox"); if(!box) return;
   box.hidden=!isOwner(); if(!isOwner()) return;
   $("#staffList").innerHTML=requestDocs.map(r=>`<div class="card"><span class="av c2">${esc([...(r.name||r.email)][0])}</span><div class="body"><span class="title">${esc(r.name||"（沒填名字）")}</span><span class="meta">${esc(r.email)} · 申請中</span></div><div class="right" style="flex-direction:row"><button class="mini" type="button" data-deny="${esc(r.email)}">拒絕</button><button class="sell" type="button" data-approve="${esc(r.email)}">核准</button></div></div>`).join("")
-    + staffDocs.map(s=>`<div class="card"><span class="av c4">${esc([...(s.name||s.email)][0])}</span><div class="body"><span class="title">${esc(s.name||s.email)}</span><span class="meta">${esc(s.email)} · ${s.role==="owner"?"負責人":"店員"}</span></div>${s.role==="owner"?"":`<button class="mini" type="button" data-unstaff="${esc(s.email)}">移除</button>`}</div>`).join("");
+    + staffDocs.map(s=>`<div class="card"><span class="av c4">${esc([...(s.name||s.email)][0])}</span><div class="body"><span class="title">${esc(s.name||s.email)}</span><span class="meta">${esc(s.email)} · ${s.role==="owner"?"負責人":"店員"}</span></div>${s.role==="owner"?"":`<div class="right" style="flex-direction:row"><button class="mini" type="button" data-mkowner="${esc(s.email)}">轉為負責人</button><button class="mini" type="button" data-unstaff="${esc(s.email)}">移除</button></div>`}</div>`).join("");
 }
 document.addEventListener("click", async e=>{
   const g=a=>e.target.closest(`[${a}]`); let el;
@@ -1122,6 +1122,16 @@ document.addEventListener("click", async e=>{
     if(el=g("data-approve")){ const r=requestDocs.find(x=>x.email===el.dataset.approve); if(!r) return;
       const b=db.batch(); b.set(db.collection("staff").doc(r.email),{email:r.email,name:r.name||r.email,role:"staff",uid:r.uid||"",at:Date.now()}); b.delete(db.collection("requests").doc(r.email)); await b.commit(); toast(`已核准 ${r.name||r.email}`); }
     else if(el=g("data-deny")){ await db.collection("requests").doc(el.dataset.deny).delete(); toast("已拒絕"); }
+    else if(el=g("data-mkowner")){ const to=staffDocs.find(x=>x.email===el.dataset.mkowner); if(!to||!meStaff) return;
+      openModal(`<h2>把負責人轉給 ${esc(to.name||to.email)}？</h2><p>轉移後，${esc(to.name||to.email)} 會成為負責人，可以核准店員、建立廠商連結；你會變成一般店員，之後只有新的負責人能把負責人再轉回來。</p><p class="err" id="moErr" hidden></p>
+        <div class="acts"><button class="btn" type="button" id="moNo">取消</button><button class="btn primary" type="button" id="moYes">確定轉移</button></div>`, md=>{
+        md.querySelector("#moNo").onclick=closeModal;
+        md.querySelector("#moYes").onclick=async()=>{ md.querySelector("#moYes").disabled=true;
+          try{ const b=db.batch(); const me=lower(auth.currentUser.email);
+            b.update(db.collection("staff").doc(to.email),{role:"owner"}); b.update(db.collection("staff").doc(me),{role:"staff"}); await b.commit();
+            closeModal(); toast(`已把負責人轉給 ${to.name||to.email}`); start(auth.currentUser);
+          }catch(x){ const p=md.querySelector("#moErr"); p.textContent="轉移失敗："+x.message; p.hidden=false; md.querySelector("#moYes").disabled=false; } };
+      }); }
     else if(el=g("data-unstaff")){ if(el.dataset.armed!=="1"){ el.dataset.armed="1"; el.textContent="再按一次"; return; } await db.collection("staff").doc(el.dataset.unstaff).delete(); toast("已移除"); }
   }catch(x){ toast("失敗："+x.message); }
 });
