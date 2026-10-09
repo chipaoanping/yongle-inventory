@@ -165,7 +165,7 @@ function render(){
   const q=$("#q").value.trim().toLowerCase(), sold=$("#showSold").checked;
   const rows=its.filter(i=>(sold||Number(i.qty)>0)&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
-  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}"><div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span></div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
+  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}"><div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span>${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
     :`<div class="empty"><b>${its.length?"沒有符合的商品":"目前沒有在店的商品"}</b></div>`;
 }
 document.addEventListener("click",e=>{ const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });

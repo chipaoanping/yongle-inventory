@@ -380,6 +380,7 @@ function itemCard(i, pick){
         ${s==="out"?'<span class="tag out">缺貨</span>':s==="low"?'<span class="tag low">低庫存</span>':""}
         ${needsPhoto(i)?'<span class="tag cam">需拍照</span>':""}
       </span>
+      ${hasVar(i)?`<span class="meta">${i.variants.map(v=>`<span class="tag${Number(v.qty)>0?"":" out"}">${esc(v.name)} ×${fmtN(v.qty)}</span>`).join("")}</span>`:""}
       ${pick?"":`<span class="meta">${esc(i.brand||"")}${i.category?" · "+esc(i.category):""}</span>`}
     </div>
     <div class="right">
@@ -500,7 +501,7 @@ function actionSheet(it){
 /* ---------- vendor stock links ---------- */
 // Each brand with a viewToken gets a public read-only doc vendorViews/{token} holding only stock fields. Any signed-in staff device keeps it current.
 const vendorSent={};
-const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件"}))
+const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件",...(hasVar(i)?{variants:i.variants.map(v=>({name:v.name,qty:Number(v.qty||0)}))}:{})}))
   .sort((x,y)=>String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true})));
 let vendorTimer=null, itemsFresh=false;
 function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout(syncVendorViews,1500); }
@@ -662,6 +663,10 @@ function itemForm(it){
         <label class="field">${isNew?"目前數量":"數量（盤點修正）"}<input id="fQty" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.qty)}"></label>
         <label class="field">單位<input id="fUnit" maxlength="8" value="${esc(it.unit||"件")}"></label>
       </div>
+      <div class="field">規格（選填，例如容量、尺寸、顏色；每個規格分開算庫存，售價相同）
+        <div id="fVars" style="display:flex;flex-direction:column;gap:8px">${(it.variants||[]).map(v=>`<div class="catrow" data-old="${esc(v.name)}"><input class="vn" maxlength="30" value="${esc(v.name)}" placeholder="規格名稱" aria-label="規格名稱"><input class="vq" type="number" min="0" step="1" inputmode="numeric" value="${esc(v.qty)}" aria-label="數量" style="max-width:88px"><button class="mini" type="button" data-vrm>刪除</button></div>`).join("")}</div>
+        <button class="btn" type="button" id="fAddVar">＋ 新增規格</button>
+      </div>
       <label class="field">安全庫存量（剩這個數量以下會提醒，0 表示不提醒）<input id="fMin" type="number" step="1" min="0" value="${esc(it.min)}"></label>
       <label class="chk"><input type="checkbox" id="fPhoto" ${it.needsPhoto?"checked":""}>售出時一定要拍照</label>
       <label class="field">備註<input id="fNote" maxlength="200" value="${esc(it.note)}"></label>
@@ -678,6 +683,13 @@ function itemForm(it){
       try{ image=await makeThumb(f,400); const p=m.querySelector("#fPrev"); p.src=image; p.hidden=false; m.querySelector("#fImgDel").hidden=false; }catch(x){ showErr(x); } };
     m.querySelector("#fCam").onchange=onImg; m.querySelector("#fFile").onchange=onImg;
     m.querySelector("#fImgDel").onclick=()=>{ image=""; m.querySelector("#fPrev").hidden=true; m.querySelector("#fImgDel").hidden=true; };
+    const vbox=m.querySelector("#fVars"), fq=m.querySelector("#fQty");
+    const qLbl=fq.parentNode.firstChild, qTxt=qLbl.textContent;
+    const syncQty=()=>{ const rows=[...vbox.querySelectorAll(".catrow")]; fq.disabled=rows.length>0; qLbl.textContent=rows.length?"總數量（規格加總）":qTxt;
+      if(rows.length) fq.value=rows.reduce((t,r)=>t+Number(r.querySelector(".vq").value||0),0); };
+    syncQty(); vbox.addEventListener("input",syncQty);
+    vbox.addEventListener("click",e=>{ const b=e.target.closest("[data-vrm]"); if(b){ b.closest(".catrow").remove(); syncQty(); } });
+    m.querySelector("#fAddVar").onclick=()=>{ vbox.insertAdjacentHTML("beforeend",`<div class="catrow" data-old=""><input class="vn" maxlength="30" placeholder="規格名稱，例如 50ml" aria-label="規格名稱"><input class="vq" type="number" min="0" step="1" inputmode="numeric" value="0" aria-label="數量" style="max-width:88px"><button class="mini" type="button" data-vrm>刪除</button></div>`); syncQty(); vbox.lastElementChild.querySelector(".vn").focus(); };
     let curCat=it.category||"";
     const fillCats=()=>{ const cs=catsOf(m.querySelector("#fBrand").value); if(curCat&&!cs.includes(curCat)) cs.push(curCat);
       m.querySelector("#fCat").innerHTML=`<option value="">未分類</option>`+cs.map(c=>`<option value="${esc(c)}" ${c===curCat?"selected":""}>${esc(c)}</option>`).join(""); };
@@ -695,15 +707,27 @@ function itemForm(it){
         qty:Number(v("#fQty")||0), unit:v("#fUnit")||"件", min:Number(v("#fMin")||0), needsPhoto:m.querySelector("#fPhoto").checked,
         note:v("#fNote"), image, updatedAt:Date.now() };
       if(!data.name||!data.brand) return;
+      const vrows=[...vbox.querySelectorAll(".catrow")].map(r=>({old:r.dataset.old, name:r.querySelector(".vn").value.trim(), qty:Math.max(0,Number(r.querySelector(".vq").value||0))})).filter(r=>r.name);
+      const vmap=new Map(); vrows.forEach(r=>{ const x=vmap.get(r.name); if(x){ x.qty+=r.qty; x.olds.push(r.old); } else vmap.set(r.name,{name:r.name,qty:r.qty,olds:[r.old]}); });
+      data.variants=[...vmap.values()].map(x=>({name:x.name,qty:x.qty}));
+      if(data.variants.length) data.qty=varSum(data.variants);
       m.querySelector("#fSave").disabled=true;
       try{
         if(isNew){
           const ref=await db.collection("items").add(data);
-          if(data.qty>0) await addMove({itemId:ref.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"in",qty:data.qty,after:data.qty,note:"建立商品（期初數量）"});
+          if(data.variants.length){ for(const x of data.variants) if(x.qty>0) await addMove({itemId:ref.id,itemName:varLabel(data,x.name),variant:x.name,sku:data.sku,brand:data.brand,type:"in",qty:x.qty,after:x.qty,note:"建立商品（期初數量）"}); }
+          else if(data.qty>0) await addMove({itemId:ref.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"in",qty:data.qty,after:data.qty,note:"建立商品（期初數量）"});
         }else{
           await db.collection("items").doc(it.id).update(data);
-          const diff=data.qty-Number(it.qty||0);
-          if(diff!==0) await addMove({itemId:it.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"adjust",qty:diff,after:data.qty,note:"盤點調整"});
+          if(hasVar(it) && data.variants.length){
+            const oldQ=new Map(it.variants.map(v=>[v.name,Number(v.qty||0)])); const used=new Set();
+            for(const x of vmap.values()){ const before=x.olds.reduce((t,o)=>{ if(o&&oldQ.has(o)&&!used.has(o)){ used.add(o); return t+oldQ.get(o); } return t; },0);
+              const d=x.qty-before; if(d!==0) await addMove({itemId:it.id,itemName:varLabel(data,x.name),variant:x.name,sku:data.sku,brand:data.brand,type:"adjust",qty:d,after:x.qty,note:"盤點調整"}); }
+            for(const [n,q] of oldQ) if(!used.has(n)&&q) await addMove({itemId:it.id,itemName:varLabel(data,n),variant:n,sku:data.sku,brand:data.brand,type:"adjust",qty:-q,after:0,note:"刪除規格"});
+          }else{
+            const diff=data.qty-Number(it.qty||0);
+            if(diff!==0) await addMove({itemId:it.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"adjust",qty:diff,after:data.qty,note:data.variants.length?"盤點調整（設定規格）":"盤點調整"});
+          }
         }
         closeModal(); toast(isNew?"已新增商品":"已儲存");
       }catch(e){ m.querySelector("#fSave").disabled=false; showErr(e); }
@@ -711,6 +735,20 @@ function itemForm(it){
   });
 }
 
+/* ---------- variants (規格): same price, separate stock; item.qty is kept = sum ---------- */
+const hasVar = it => Array.isArray(it&&it.variants) && it.variants.length>0;
+const varSum = vs => vs.reduce((t,v)=>t+Number(v.qty||0),0);
+const varLabel = (it, v) => v ? `${it.name}（${v}）` : it.name;
+function varPick(it, inStockOnly){
+  if(!hasVar(it)) return "";
+  const vs=it.variants.filter(v=>!inStockOnly||Number(v.qty)>0);
+  return `<label class="field">規格<select id="xVar" required><option value="" disabled selected>請選擇規格</option>${vs.map(v=>`<option value="${esc(v.name)}">${esc(v.name)}（剩 ${fmtN(v.qty)}）</option>`).join("")}</select></label>`;
+}
+function bumpVariant(cur, name, delta){ // cur = fresh item data; returns {variants, qty, vqty}
+  const vs=(cur.variants||[]).map(v=>({...v})); let x=vs.find(v=>v.name===name);
+  if(!x){ x={name,qty:0}; vs.push(x); }
+  x.qty=Number(x.qty||0)+delta; return {variants:vs, qty:varSum(vs), vqty:x.qty};
+}
 function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:Date.now()}); }
 
 async function makeThumb(file, S=240){
@@ -746,6 +784,7 @@ function sellForm(it){
     <h2>售出：${esc(it.name)}</h2>
     <p class="hint">${esc(it.brand||"")}　目前庫存 <b class="money">${fmtN(it.qty)}</b> ${esc(it.unit||"件")}</p>
     <form id="s" style="display:flex;flex-direction:column;gap:10px">
+      ${varPick(it,true)}
       <div class="grid2">
         <label class="field">數量<input id="sQty" type="number" step="1" min="1" inputmode="numeric" value="1" required></label>
         <label class="field">單價（可改成折扣價）<input id="sPrice" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.price)}" required></label>
@@ -787,13 +826,17 @@ function sellForm(it){
       const btn=m.querySelector("#sSave"); btn.disabled=true;
       try{
         const ref=db.collection("items").doc(it.id);
-        const cur=Number(((await ref.get()).data()||{}).qty||0);
+        const fresh=(await ref.get()).data()||{}; const cur=Number(fresh.qty||0);
+        const vn=hasVar(fresh)?(m.querySelector("#xVar")||{}).value:"";
+        if(hasVar(fresh)&&!vn){ btn.disabled=false; return err("請先選規格。"); }
+        const vb=vn?bumpVariant(fresh,vn,-n):null;
+        if(vb&&vb.vqty<0){ btn.disabled=false; return err(`${vn} 只剩 ${fmtN(vb.vqty+n)}，不能賣 ${fmtN(n)}。`); }
         if(n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}，不能賣 ${fmtN(n)}。`); }
-        const {amt,commission,payout}=calc(); const after=cur-n;
+        const {amt,commission,payout}=calc(); const after=vb?vb.vqty:cur-n;
         let photoId="";
         if(photo){ const p=await db.collection("photos").add({data:photo,itemName:it.name,at:Date.now(),by:myId||""}); photoId=p.id; }
-        await ref.update({qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:it.name,brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,photoId,after,note:m.querySelector("#sNote").value.trim()});
+        await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
+        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,photoId,after,note:m.querySelector("#sNote").value.trim()});
         closeModal(); toast(`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
@@ -809,6 +852,7 @@ function stockForm(it){
         <button type="button" data-t="in" aria-pressed="true">店家送貨（入庫）</button>
         <button type="button" data-t="return" aria-pressed="false">退回給店家</button>
       </div>
+      ${varPick(it,false)}
       <label class="field">數量<input id="kQty" type="number" step="1" min="1" inputmode="numeric" required></label>
       <label class="field">備註（選填）<input id="kNote" maxlength="200"></label>
       <p class="err" id="kErr" hidden></p>
@@ -824,11 +868,15 @@ function stockForm(it){
       const btn=m.querySelector("#kSave"); btn.disabled=true;
       try{
         const ref=db.collection("items").doc(it.id);
-        const cur=Number(((await ref.get()).data()||{}).qty||0);
+        const fresh=(await ref.get()).data()||{}; const cur=Number(fresh.qty||0);
+        const vn=hasVar(fresh)?(m.querySelector("#xVar")||{}).value:"";
+        if(hasVar(fresh)&&!vn){ btn.disabled=false; return err("請先選規格。"); }
+        const vb=vn?bumpVariant(fresh,vn,t==="in"?n:-n):null;
+        if(vb&&vb.vqty<0){ btn.disabled=false; return err(`${vn} 只剩 ${fmtN(vb.vqty+n)}。`); }
         if(t==="return" && n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}。`); }
-        const after=t==="in"?cur+n:cur-n;
-        await ref.update({qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:it.name,brand:it.brand||"",type:t,qty:n,after,note:m.querySelector("#kNote").value.trim()});
+        const after=vb?vb.vqty:(t==="in"?cur+n:cur-n);
+        await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
+        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:t,qty:n,after,note:m.querySelector("#kNote").value.trim()});
         closeModal(); toast(`${TYPE[t]} ${fmtN(n)}，結存 ${fmtN(after)}`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
@@ -851,7 +899,9 @@ function voidSale(m){
       md.querySelector("#vYes").disabled=true;
       try{
         const ref=db.collection("items").doc(m.itemId); const s=await ref.get();
-        if(s.exists){ await ref.update({qty:Number((s.data()||{}).qty||0)+Number(m.qty||0),updatedAt:Date.now()}); }
+        if(s.exists){ const fresh=s.data()||{};
+          if(m.variant&&hasVar(fresh)){ const vb=bumpVariant(fresh,m.variant,Number(m.qty||0)); await ref.update({variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}); }
+          else await ref.update({qty:Number(fresh.qty||0)+Number(m.qty||0),updatedAt:Date.now()}); }
         await db.collection("moves").doc(m.id).update({void:true,voidBy:myId||"",voidAt:Date.now()});
         closeModal(); toast("已作廢");
       }catch(e){ const p=md.querySelector("#vErr"); p.textContent="作廢失敗："+errText(e); p.hidden=false; md.querySelector("#vYes").disabled=false; }
@@ -1114,8 +1164,8 @@ $("#migrateBtn").onclick=()=>$("#migrateFile").click();
 $("#migrateFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importMigration(f); };
 $("#exportItemsBtn").hidden=false; $("#exportSettleBtn").hidden=false;
 $("#exportItemsBtn").onclick=()=>{
-  const a=[["品牌","分類","商品編號","商品名稱","售價","抽成%","數量","單位","安全庫存","售出需拍照","備註"].map(cell).join(",")]
-    .concat(items.map(i=>[i.brand,i.category,i.sku,i.name,i.price,i.rate??DEFAULT_RATE,i.qty,i.unit,i.min,needsPhoto(i)?"是":"",i.note].map(cell).join(",")));
+  const a=[["品牌","分類","商品編號","商品名稱","售價","抽成%","數量","規格","單位","安全庫存","售出需拍照","備註"].map(cell).join(",")]
+    .concat(items.map(i=>[i.brand,i.category,i.sku,i.name,i.price,i.rate??DEFAULT_RATE,i.qty,hasVar(i)?i.variants.map(v=>`${v.name}:${v.qty}`).join("；"):"",i.unit,i.min,needsPhoto(i)?"是":"",i.note].map(cell).join(",")));
   saveCSV(`永樂商品清單_${monthKey(Date.now())}.csv`, a);
 };
 $("#exportSettleBtn").onclick=()=>{
