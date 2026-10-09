@@ -87,6 +87,11 @@ button.stat{cursor:pointer}
 .card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:12px;display:flex;align-items:center;gap:12px;min-width:0}
 .card.tap{cursor:pointer}
 .av{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-weight:900;font-size:18px;flex:none}
+.av.img{object-fit:cover;background:#fff;padding:0}
+.chip .ci{width:22px;height:22px;border-radius:7px;object-fit:cover;vertical-align:middle;margin:-3px 6px -3px -6px;background:#fff}
+.imgpick{width:44px;height:44px;flex:0 0 44px;border-radius:12px;border:2px dashed var(--line);background:var(--surface-2);color:var(--muted);display:grid;place-items:center;cursor:pointer;overflow:hidden;padding:0;font:inherit;font-size:20px}
+.imgpick img{width:100%;height:100%;object-fit:cover;background:#fff}
+.imgpick.has{border-style:solid}
 .c1{background:var(--b1s);color:var(--b1)} .c2{background:var(--b2s);color:var(--b2)} .c3{background:var(--b3s);color:var(--b3)} .c4{background:var(--b4s);color:var(--b4)} .c5{background:var(--b5s);color:var(--b5)}
 .body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
 .title{font-weight:700;overflow-wrap:anywhere}
@@ -317,7 +322,9 @@ const catsOf = b => [...new Set(((brandDoc(b)||{}).categories||[]).concat(items.
 const needsPhoto = it => !!it.needsPhoto || brandDocs.some(b=>b.name===it.brand && b.needsPhoto);
 const liveSales = () => moves.filter(m=>m.type==="sale" && !m.void);
 const brandColor = b => { const list=brands(); const i=list.indexOf(b); return "c"+((i<0?[...String(b)].reduce((s,c)=>s+c.charCodeAt(0),0):i)%5+1); };
-const avatar = (b, label) => `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`;
+const DEFAULT_LOGOS = {"木子花花":"logos/muzi.jpg","世界漂亮在台協會":"logos/sekai.jpg"};
+const brandImg = (b, cat) => { const d=brandDoc(b)||{}; return (cat&&d.catImages&&d.catImages[cat])||d.logo||DEFAULT_LOGOS[b]||""; };
+const avatar = (b, label, cat) => { const im=brandImg(b,cat); return im ? `<img class="av img" src="${esc(im)}" alt="" aria-hidden="true">` : `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`; };
 
 /* ---------- operator names ---------- */
 async function resolveNames(ids){
@@ -342,7 +349,7 @@ function renderSummary(){
 function itemCard(i, pick){
   const s=status(i);
   return `<div class="card tap" tabindex="0" role="button" data-${pick?"pick":"act"}="${esc(i.id)}">
-    ${avatar(i.brand,i.name)}
+    ${avatar(i.brand,i.name,i.category)}
     <div class="body">
       <span class="title">${esc(i.name)}</span>
       <span class="meta">
@@ -364,11 +371,11 @@ function renderItems(){
   const bl=brands();
   if(brandFilter && !bl.includes(brandFilter)) brandFilter="";
   $("#brandChips").innerHTML=[`<button class="chip" type="button" data-bf="" aria-pressed="${!brandFilter}">全部 ${items.length}</button>`]
-    .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${esc(b)} ${items.filter(i=>i.brand===b).length}</button>`)).join("");
+    .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${brandImg(b)?`<img class="ci" src="${esc(brandImg(b))}" alt="">`:""}${esc(b)} ${items.filter(i=>i.brand===b).length}</button>`)).join("");
   const cats=brandFilter?catsOf(brandFilter):[];
   if(catFilter && !cats.includes(catFilter)) catFilter="";
   const cc=$("#catChips"); cc.hidden=!brandFilter||!cats.length;
-  cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${esc(c)} ${items.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
+  cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${((brandDoc(brandFilter)||{}).catImages||{})[c]?`<img class="ci" src="${esc(brandDoc(brandFilter).catImages[c])}" alt="">`:""}${esc(c)} ${items.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
   if(!db) return;
   const q=$("#q").value.trim().toLowerCase();
   const rows=items.filter(i=>(!brandFilter||i.brand===brandFilter)&&(!catFilter||i.category===catFilter)&&(!lowOnly||status(i))&&(!q||[i.name,i.sku,i.brand,i.category,i.note].join(" ").toLowerCase().includes(q)))
@@ -454,7 +461,7 @@ function openModal(html, bind, wide){
 }
 
 function actionSheet(it){
-  openModal(`<div style="display:flex;gap:12px;align-items:center">${avatar(it.brand,it.name)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
+  openModal(`<div style="display:flex;gap:12px;align-items:center">${avatar(it.brand,it.name,it.category)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
     <div class="menu" style="box-shadow:none;background:var(--surface-2)">
       <button type="button" id="aSell" ${Number(it.qty)>0?"":"disabled"}><span class="ico">${TICON.sale}</span><span>售出${needsPhoto(it)?"<small>這個商品售出要拍照</small>":""}</span></button>
       <button type="button" id="aStock"><span class="ico">${TICON.in}</span><span>入庫／退回店家</span></button>
@@ -478,9 +485,9 @@ function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout
 async function syncVendorViews(){
   if(!db||!itemsFresh) return;
   for(const d of brandDocs){ if(!d.viewToken||!d.name) continue;
-    const json=vendorPayload(d.name); const key=d.viewToken+"|"+d.name;
+    const json=vendorPayload(d.name); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
     if(vendorSent[key]===json) continue;
-    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,items:JSON.parse(json),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
+    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:JSON.parse(json),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
   }
 }
 const vendorUrl = t => new URL("vendor.html?t="+t, location.href).href;
@@ -505,7 +512,7 @@ async function vendorAction(name, act, box){
     const ops=[]; if(d.viewToken) ops.push({ref:db.collection("vendorViews").doc(d.viewToken),del:true});
     const tok=act==="off"?"":newToken(); const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
     ops.push({ref:bref,data:d.id?{viewToken:tok}:{name,viewToken:tok}});
-    if(tok) ops.push({ref:db.collection("vendorViews").doc(tok),data:{brand:name,items:JSON.parse(vendorPayload(name)),updatedAt:Date.now()}});
+    if(tok) ops.push({ref:db.collection("vendorViews").doc(tok),data:{brand:name,logo:brandImg(name),items:JSON.parse(vendorPayload(name)),updatedAt:Date.now()}});
     await commitOps(ops);
     if(d.id) d.viewToken=tok; else brandDocs.push({id:bref.id,name,viewToken:tok});
     delete box.dataset.armed; box.innerHTML=vendorBox(name);
@@ -515,15 +522,20 @@ async function vendorAction(name, act, box){
 
 /* ---------- brands & categories ---------- */
 async function commitOps(ops){
-  for(let i=0;i<ops.length;i+=400){ const b=db.batch(); ops.slice(i,i+400).forEach(o=>o.del?b.delete(o.ref):b.set(o.ref,o.data,{merge:true})); await b.commit(); }
+  for(let i=0;i<ops.length;i+=400){ const b=db.batch(); ops.slice(i,i+400).forEach(o=>o.del?b.delete(o.ref):o.replace?b.set(o.ref,o.data):b.set(o.ref,o.data,{merge:true})); await b.commit(); }
 }
 function brandForm(name){
   const isNew=!name; const d=(name&&brandDoc(name))||{}; const its=name?items.filter(i=>i.brand===name):[];
-  const row=(c,n)=>`<div class="catrow" data-old="${esc(c)}"><input maxlength="30" value="${esc(c)}" placeholder="分類名稱，例如 A 項鍊" aria-label="分類名稱"><span class="n">${n} 件</span><button class="mini" type="button" data-rm>刪除</button></div>`;
+  const imgs={logo:d.logo||"", cats:{...(d.catImages||{})}};
+  const logoNow=imgs.logo||DEFAULT_LOGOS[name]||"";
+  const pickBtn=(src,attr)=>`<button type="button" class="imgpick${src?" has":""}" ${attr} aria-label="選圖片">${src?`<img src="${esc(src)}" alt="">`:"＋"}</button>`;
+  const row=(c,n)=>`<div class="catrow" data-old="${esc(c)}">${pickBtn(imgs.cats[c]||"","data-ci")}<input maxlength="30" value="${esc(c)}" placeholder="分類名稱，例如 A 項鍊" aria-label="分類名稱"><span class="n">${n} 件</span><button class="mini" type="button" data-rm>刪除</button></div>`;
   openModal(`
     <h2>${isNew?"新增品牌":"編輯品牌"}</h2>
     <form id="b" style="display:flex;flex-direction:column;gap:10px">
-      <label class="field">品牌名稱<input id="bName" required maxlength="40" value="${esc(name||"")}"></label>
+      <div class="catrow" style="align-items:flex-end">${pickBtn(logoNow,"data-logo")}<label class="field" style="flex:1">品牌名稱<input id="bName" required maxlength="40" value="${esc(name||"")}"></label></div>
+      <input type="file" id="bImg" accept="image/*" hidden>
+      <p class="hint" style="margin:-4px 0 0">點左邊方塊可以放品牌 Logo；分類前面的方塊可以放分類照片。</p>
       <label class="chk"><input type="checkbox" id="bSku" ${d.hasSku?"checked":""}>商品有編號</label>
       <label class="chk"><input type="checkbox" id="bPhoto" ${d.needsPhoto?"checked":""}>這個品牌每件售出都要拍照</label>
       <div class="field">分類<div id="bCats" style="display:flex;flex-direction:column;gap:8px">${(name?catsOf(name):[]).map(c=>row(c,its.filter(i=>i.category===c).length)).join("")}</div>
@@ -539,6 +551,11 @@ function brandForm(name){
     </form>`, m=>{
     const err=t=>{ const p=m.querySelector("#bErr"); p.textContent=t; p.hidden=!t; };
     m.querySelector("#bCancel").onclick=closeModal;
+    let target=null; const fi=m.querySelector("#bImg");
+    m.addEventListener("click",e=>{ const b=e.target.closest("[data-logo],[data-ci]"); if(!b) return; target=b; fi.value=""; fi.click(); });
+    fi.onchange=async()=>{ const f=fi.files[0]; if(!f||!target) return;
+      try{ const u=await makeThumb(f); target.dataset.img=u; target.classList.add("has"); target.innerHTML=`<img src="${u}" alt="">`;
+        if(target.hasAttribute("data-logo")) imgs.logo=u; }catch(x){ err(x.message); } };
     const vb=m.querySelector("#bVend"); if(vb) vb.addEventListener("click",e=>{ const b=e.target.closest("[data-vl]"); if(b) vendorAction(name,b.dataset.vl,vb); });
     m.querySelector("#bAddCat").onclick=()=>{ m.querySelector("#bCats").insertAdjacentHTML("beforeend",row("",0)); const r=m.querySelector("#bCats").lastElementChild; r.dataset.old=""; r.querySelector(".n").textContent=""; r.querySelector("input").focus(); };
     m.querySelector("#bCats").addEventListener("click",e=>{ const b=e.target.closest("[data-rm]"); if(!b) return; const r=b.closest(".catrow");
@@ -554,7 +571,8 @@ function brandForm(name){
       ev.preventDefault(); err("");
       const nn=m.querySelector("#bName").value.trim(); if(!nn) return;
       if(nn!==name && brands().includes(nn)) return err("已經有這個品牌名稱了。");
-      const rows=[...m.querySelectorAll("#bCats .catrow")].map(r=>({old:r.dataset.old, val:r.querySelector("input").value.trim(), del:r.classList.contains("del")}));
+      const rows=[...m.querySelectorAll("#bCats .catrow")].map(r=>{ const pb=r.querySelector("[data-ci]"); return {old:r.dataset.old, val:r.querySelector("input").value.trim(), del:r.classList.contains("del"), img:(pb&&pb.dataset.img)||imgs.cats[r.dataset.old]||""}; });
+      const catImages={}; rows.forEach(r=>{ if(!r.del&&r.val&&r.img) catImages[r.val]=r.img; });
       const cats=[...new Set(rows.filter(r=>!r.del&&r.val).map(r=>r.val))];
       const catMap={}; rows.forEach(r=>{ if(r.old) catMap[r.old]= r.del ? "" : (r.val||r.old); });
       const btn=m.querySelector("#bSave"); btn.disabled=true;
@@ -569,7 +587,8 @@ function brandForm(name){
           Object.entries(settles).forEach(([id,v])=>{ if(v.brand===name){ ops.push({ref:db.collection("settlements").doc(`${v.month}_${brandKey(nn)}`),data:{...v,brand:nn}}); ops.push({ref:db.collection("settlements").doc(id),del:true}); } });
         }
         const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
-        ops.push({ref:bref,data:{name:nn,hasSku:m.querySelector("#bSku").checked,needsPhoto:m.querySelector("#bPhoto").checked,categories:cats}});
+        const {id:_id,...keep}=d;
+        ops.push({ref:bref,replace:true,data:{...keep,name:nn,hasSku:m.querySelector("#bSku").checked,needsPhoto:m.querySelector("#bPhoto").checked,categories:cats,logo:imgs.logo,catImages}});
         await commitOps(ops);
         if(renamed && brandFilter===name) brandFilter=nn;
         closeModal(); toast(isNew?"已新增品牌":"已儲存品牌與分類");
@@ -656,6 +675,16 @@ function itemForm(it){
 
 function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:Date.now()}); }
 
+async function makeThumb(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("讀不到這張圖片")); i.src=url; });
+    const S=240, w=img.naturalWidth, h=img.naturalHeight, m=Math.min(w,h);
+    const c=document.createElement("canvas"); c.width=S; c.height=S; const x=c.getContext("2d");
+    x.fillStyle="#fff"; x.fillRect(0,0,S,S); x.drawImage(img,(w-m)/2,(h-m)/2,m,m,0,0,S,S);
+    return c.toDataURL("image/jpeg",0.82);
+  } finally { URL.revokeObjectURL(url); }
+}
 async function compressPhoto(file){
   const url=URL.createObjectURL(file);
   try{

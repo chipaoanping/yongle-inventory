@@ -101,7 +101,7 @@ main{padding-bottom:40px}
 </style>
 </head>
 <body>
-<header class="top"><div class="grow"><h1 id="bname">永樂寄售庫存</h1><div class="sub" id="upd">讀取中…</div></div></header>
+<header class="top"><img id="blogo" alt="" hidden style="width:48px;height:48px;border-radius:14px;object-fit:cover;background:#fff;flex:none"><div class="grow"><h1 id="bname">永樂寄售庫存</h1><div class="sub" id="upd">讀取中…</div></div></header>
 <main>
   <div class="screen">
     <div class="stats" id="stats" hidden>
@@ -151,7 +151,7 @@ $("#q").oninput=()=>view&&render(); $("#showSold").onchange=()=>view&&render();
   firebase.initializeApp(window.FIREBASE_CONFIG);
   firebase.firestore().collection("vendorViews").doc(t).onSnapshot(d=>{
     if(!d.exists) return fail("這個連結已經失效");
-    view=d.data(); document.title=`${view.brand} 寄售庫存`; $("#bname").textContent=`${view.brand}`;
+    view=d.data(); document.title=`${view.brand} 寄售庫存`; $("#bname").textContent=`${view.brand}`; if(view.logo){ $("#blogo").src=view.logo; $("#blogo").hidden=false; }
     $("#upd").textContent="永樂寄售庫存 · 更新於 "+new Date(view.updatedAt||Date.now()).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
     $("#stats").hidden=false; $("#tools").hidden=false; render();
   }, ()=>fail("這個連結已經失效"));
