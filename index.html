@@ -1,0 +1,948 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f7a68">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="永樂庫存">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<title>永樂庫存</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icon-180.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:0}
+body{margin:0}
+img{max-width:100%}
+
+/* Layout: a phone app. Sticky top bar, one scrolling screen per tab, fixed bottom nav with a raised 售出 button in the middle. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --surface-2:#eaefed; --ink:#14231f; --muted:#65766f; --line:#dfe6e3;
+  --accent:#0f7a68; --accent-ink:#ffffff; --accent-soft:#d8efe9;
+  --warn:#b45309; --warn-soft:#fdefd9; --bad:#c02c1d; --bad-soft:#fde4e1; --good:#1d7f3e; --good-soft:#dcf3e3;
+  --b1:#c2410c; --b1s:#ffe8d9; --b2:#be185d; --b2s:#fde3ef; --b3:#6d28d9; --b3s:#ece4fd; --b4:#0369a1; --b4s:#dcf0fb; --b5:#4d7c0f; --b5s:#e9f5d6;
+  --shadow:0 1px 2px rgba(20,35,31,.06),0 4px 14px rgba(20,35,31,.06);
+  --scrim:rgba(10,20,18,.45);
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --nav-h:64px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
+  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
+  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
+  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
+  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
+  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
+  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.num{font-variant-numeric:tabular-nums}
+svg.i{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-inline:16px;padding-block:12px 8px;display:flex;align-items:center;gap:10px;max-width:640px;margin:0 auto}
+.top h1{margin:0;font-size:22px;font-weight:900;letter-spacing:.04em}
+.top .sub{font-size:13px;color:var(--muted);font-weight:500}
+.top .grow{flex:1}
+.sync{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync.ok::before{background:var(--good)} .sync.bad::before{background:var(--bad)}
+
+main{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:4px calc(var(--nav-h) + 40px + env(safe-area-inset-bottom,0px))}
+.screen{display:flex;flex-direction:column;gap:14px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--surface);border-radius:16px;padding:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;border:0;font:inherit;color:inherit;text-align:left;min-width:0}
+.stat .k{font-size:12px;color:var(--muted);font-weight:500}
+.stat .v{font-size:20px;font-weight:900;overflow-wrap:anywhere}
+.stat.money .v{color:var(--accent)}
+button.stat{cursor:pointer}
+.stat.alert .v{color:var(--warn)}
+.stat.alert[aria-pressed="true"]{outline:2px solid var(--warn)}
+
+/* search + chips */
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:14px;padding:0 14px;box-shadow:var(--shadow);color:var(--muted)}
+.search input{flex:1;border:0;background:transparent;padding:13px 0;font:inherit;font-size:16px;color:var(--ink);min-width:0;outline:none}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:0;border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;font-weight:700;background:var(--surface);color:var(--muted);box-shadow:var(--shadow);cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chips#catChips .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chip.warn[aria-pressed="true"]{background:var(--warn);color:var(--surface)}
+
+/* cards */
+.section-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:var(--muted);margin-top:4px}
+.section-h .count{font-weight:500}
+.cards{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:12px;display:flex;align-items:center;gap:12px;min-width:0}
+.card.tap{cursor:pointer}
+.av{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-weight:900;font-size:18px;flex:none}
+.c1{background:var(--b1s);color:var(--b1)} .c2{background:var(--b2s);color:var(--b2)} .c3{background:var(--b3s);color:var(--b3)} .c4{background:var(--b4s);color:var(--b4)} .c5{background:var(--b5s);color:var(--b5)}
+.body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.title{font-weight:700;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.tag{font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+.tag.low{background:var(--warn-soft);color:var(--warn)} .tag.out{background:var(--bad-soft);color:var(--bad)} .tag.ok{background:var(--good-soft);color:var(--good)} .tag.cam{background:var(--accent-soft);color:var(--accent)}
+.right{display:flex;flex-direction:column;align-items:flex-end;gap:6px;flex:none}
+.qty{font-size:20px;font-weight:900;line-height:1}
+.qty small{font-size:12px;font-weight:500;color:var(--muted);margin-left:2px}
+.sell{border:0;border-radius:12px;padding:8px 16px;font:inherit;font-size:15px;font-weight:700;background:var(--accent);color:var(--accent-ink);cursor:pointer;min-height:40px}
+.sell:disabled{background:var(--surface-2);color:var(--muted);cursor:not-allowed}
+.empty{padding:40px 20px;text-align:center;color:var(--muted);background:var(--surface);border-radius:16px;box-shadow:var(--shadow)}
+.empty b{display:block;color:var(--ink);font-size:17px;margin-bottom:4px}
+
+/* log */
+.ico{width:40px;height:40px;border-radius:12px;display:grid;place-items:center;flex:none}
+.ico.sale{background:var(--good-soft);color:var(--good)} .ico.in{background:var(--accent-soft);color:var(--accent)} .ico.return,.ico.adjust{background:var(--surface-2);color:var(--muted)}
+.card.void{opacity:.55} .card.void .title{text-decoration:line-through}
+.amt{font-weight:900}
+.mini{border:0;background:var(--surface-2);color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.daysep{font-size:13px;font-weight:700;color:var(--muted);margin-top:6px}
+
+/* settle */
+.month{display:flex;align-items:center;justify-content:space-between;background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:6px}
+.month b{font-size:18px}
+.iconbtn{border:0;background:transparent;color:var(--ink);width:44px;height:44px;border-radius:12px;display:grid;place-items:center;cursor:pointer}
+.iconbtn:hover{background:var(--surface-2)}
+.hero{background:var(--accent);color:var(--accent-ink);border-radius:20px;padding:18px;display:grid;grid-template-columns:repeat(3,1fr);gap:8px}
+.hero div{display:flex;flex-direction:column;min-width:0}
+.hero span{font-size:12px;opacity:.85}
+.hero b{font-size:20px;font-weight:900;overflow-wrap:anywhere}
+.scard{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.scard .head{display:flex;align-items:center;gap:12px;padding:12px;cursor:pointer}
+.scard .nums{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;padding:0 12px 12px;font-size:13px;color:var(--muted)}
+.scard .nums b{display:block;font-size:16px;color:var(--ink)}
+.scard .nums .pay b{color:var(--accent)}
+.scard .foot{display:flex;justify-content:flex-end;gap:8px;padding:0 12px 12px}
+.payb{border:0;border-radius:12px;padding:10px 16px;font:inherit;font-weight:700;cursor:pointer;background:var(--accent-soft);color:var(--accent);min-height:44px}
+.scard .det{border-top:1px solid var(--line);padding:6px 12px 10px;display:flex;flex-direction:column}
+.scard .det div{display:flex;justify-content:space-between;gap:8px;padding:6px 0;font-size:14px;border-bottom:1px solid var(--line);align-items:center}
+.scard .det div:last-child{border-bottom:0}
+
+/* more */
+.menu{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);overflow:hidden}
+.menu button{display:flex;width:100%;align-items:center;gap:14px;padding:14px 16px;border:0;border-bottom:1px solid var(--line);background:transparent;font:inherit;color:var(--ink);text-align:left;cursor:pointer;min-height:56px}
+.menu button:last-child{border-bottom:0}
+.menu button:disabled{opacity:.5}
+.menu .ico{width:36px;height:36px;border-radius:10px;background:var(--accent-soft);color:var(--accent)}
+.menu small{display:block;color:var(--muted);font-size:13px}
+.brandlist{display:flex;flex-wrap:wrap;gap:8px}
+
+/* bottom nav */
+.nav{position:fixed;left:0;right:0;bottom:0;z-index:6;background:var(--surface);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom,0px)}
+.nav .in{max-width:640px;margin:0 auto;height:var(--nav-h);display:grid;grid-template-columns:repeat(5,1fr);align-items:center}
+.nav button{border:0;background:transparent;font:inherit;font-size:11px;font-weight:700;color:var(--muted);display:flex;flex-direction:column;align-items:center;gap:2px;height:100%;cursor:pointer;justify-content:center}
+.nav button[aria-selected="true"]{color:var(--accent)}
+.nav .fab{position:relative}
+.nav .fab span.ring{width:60px;height:60px;border-radius:50%;background:var(--accent);color:var(--accent-ink);display:grid;place-items:center;margin-top:-30px;box-shadow:0 6px 18px rgba(15,122,104,.35);border:4px solid var(--surface)}
+.nav .fab span.ring svg{width:28px;height:28px}
+
+/* sheets */
+.scrim{position:fixed;inset:0;background:var(--scrim);display:flex;align-items:flex-end;justify-content:center;z-index:10}
+.sheet{background:var(--surface);color:var(--ink);border-radius:22px 22px 0 0;width:100%;max-width:640px;padding:10px 18px calc(18px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;gap:14px;max-height:92%;overflow:auto}
+.sheet::before{content:"";display:block;width:40px;height:5px;border-radius:3px;background:var(--line);margin:0 auto 2px}
+.sheet h2{margin:0;font-size:20px;font-weight:900;overflow-wrap:anywhere}
+.sheet form{display:flex;flex-direction:column;gap:12px}
+.field{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500;color:var(--muted)}
+input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:2px solid transparent;border-radius:12px;padding:11px 12px;min-width:0;width:100%}
+input:focus,select:focus{outline:none;border-color:var(--accent)}
+button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+.acts{display:flex;gap:10px;flex-wrap:wrap}
+.acts .spacer{flex:1}
+.btn{flex:1;font:inherit;font-weight:700;border-radius:14px;padding:13px 16px;border:0;background:var(--surface-2);color:var(--ink);cursor:pointer;white-space:nowrap;min-height:50px}
+.btn.primary{background:var(--accent);color:var(--accent-ink)}
+.btn.danger{background:var(--bad-soft);color:var(--bad);flex:0 0 auto}
+.btn.small{flex:0 0 auto;min-height:36px;padding:6px 12px;font-size:14px}
+.btn:disabled{opacity:.5;cursor:not-allowed}
+.chk{display:flex;align-items:center;gap:10px;font-size:15px;color:var(--ink);font-weight:500}
+.chk input{width:22px;height:22px;accent-color:var(--accent)}
+.hint{font-size:13px;color:var(--muted);margin:0}
+.err{color:var(--bad);font-size:14px;font-weight:700;margin:0}
+.split{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;background:var(--accent-soft);border-radius:14px;padding:12px}
+.split div{display:flex;flex-direction:column;font-size:12px;color:var(--muted)}
+.split b{font-size:19px;color:var(--ink);font-weight:900}
+.photo-pick{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.photo-pick label.btn{flex:0 0 auto;background:var(--accent-soft);color:var(--accent)}
+.photo-pick img{width:84px;height:84px;object-fit:cover;border-radius:12px}
+.bigphoto{width:100%;border-radius:14px}
+.seg{display:flex;background:var(--surface-2);border-radius:14px;padding:4px;gap:4px}
+.seg button{flex:1;font:inherit;font-weight:700;padding:10px;border:0;border-radius:10px;background:transparent;color:var(--muted);cursor:pointer;min-height:44px}
+.seg button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.tablewrap{overflow-x:auto;border-radius:12px;background:var(--surface-2)}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th,td{padding:8px 10px;text-align:left;white-space:nowrap}
+th{font-size:12px;color:var(--muted)}
+td.n,th.n{text-align:right}
+.pickl{display:flex;flex-direction:column;gap:8px;max-height:52vh;overflow:auto}
+.pickl .card{box-shadow:none;background:var(--surface-2)}
+.toast{position:fixed;left:50%;bottom:calc(var(--nav-h) + 20px + env(safe-area-inset-bottom,0px));transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:10px 18px;border-radius:99px;font-size:14px;font-weight:700;z-index:20;max-width:calc(100% - 32px);text-align:center}
+@media (max-width:380px){ .stat .v,.hero b{font-size:17px} }
+@media (prefers-reduced-motion:no-preference){ .sheet{animation:up .22s ease-out} @keyframes up{from{transform:translateY(30px);opacity:.6}to{transform:none;opacity:1}} }
+
+.gate{position:fixed;inset:0;z-index:30;background:var(--bg);overflow:auto;display:flex;justify-content:center;padding-inline:16px;padding-block:calc(40px + env(safe-area-inset-top,0px)) 40px}
+.gatebox{width:100%;max-width:400px;display:flex;flex-direction:column;gap:14px;text-align:center}
+.gatebox img{margin:0 auto;border-radius:18px}
+.gatebox h1{margin:0;font-size:26px;font-weight:900}
+.gatebox p{margin:0;color:var(--muted)}
+.gatebox .field,.gform{text-align:left}
+.gform{display:flex;flex-direction:column;gap:12px}
+.linkbtn{border:0;background:none;color:var(--accent);font:inherit;font-weight:700;padding:8px;cursor:pointer}
+
+</style>
+</head>
+<body>
+<header class="top">
+  <div><h1>永樂庫存</h1><div class="sub" id="screenTitle">商品</div></div>
+  <span class="grow"></span>
+  <span class="sync" id="conn">連線中</span>
+</header>
+
+<main>
+  <section class="screen" id="p-items">
+    <div class="stats">
+      <div class="stat money"><span class="k">今日銷售</span><span class="v num" id="sToday">–</span></div>
+      <div class="stat money"><span class="k">本月抽成</span><span class="v num" id="sMonth">–</span></div>
+      <button class="stat alert" id="sLowBtn" type="button" aria-pressed="false"><span class="k">低庫存</span><span class="v num" id="sLow">–</span></button>
+    </div>
+    <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋商品、編號或品牌" aria-label="搜尋商品"></label>
+    <div class="chips" id="brandChips" role="group" aria-label="品牌"></div>
+    <div class="chips" id="catChips" role="group" aria-label="分類" hidden></div>
+    <div class="cards" id="list"><div class="empty">正在載入商品…</div></div>
+  </section>
+
+  <section class="screen" id="p-log" hidden>
+    <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="lq" type="search" placeholder="搜尋商品、編號或備註" aria-label="搜尋紀錄"></label>
+    <div class="chips" id="typeChips" role="group" aria-label="類型"></div>
+    <div class="cards" id="logList"></div>
+    <p class="hint">顯示最近 500 筆。售出打錯可以按「作廢」，數量會自動加回。</p>
+  </section>
+
+  <section class="screen" id="p-settle" hidden>
+    <div class="month">
+      <button class="iconbtn" type="button" id="mPrev" aria-label="上個月"><svg class="i" viewBox="0 0 24 24"><path d="m15 18-6-6 6-6"/></svg></button>
+      <b id="mLabel" class="num">–</b>
+      <button class="iconbtn" type="button" id="mNext" aria-label="下個月"><svg class="i" viewBox="0 0 24 24"><path d="m9 18 6-6-6-6"/></svg></button>
+    </div>
+    <div class="hero" id="hero"></div>
+    <div class="cards" id="settleList"></div>
+    <p class="hint">點品牌看這個月每一筆售出。付款給店家後按「標記已付」。</p>
+  </section>
+
+  <section class="screen" id="p-more" hidden>
+    <div class="menu">
+      <button type="button" id="addBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>新增商品<small>一筆一筆加入寄售商品</small></span></button>
+      <button type="button" id="importBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg></span><span>匯入 CSV<small>從 Google 試算表下載 CSV 再匯入</small></span></button>
+      <button type="button" id="exportItemsBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0-4 4m4-4 4 4M5 21h14"/></svg></span><span>匯出商品清單<small>CSV，可用 Excel 開</small></span></button>
+      <button type="button" id="exportSettleBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0-4 4m4-4 4 4M5 21h14"/></svg></span><span>匯出本月結算<small id="exportSettleSub">給店家對帳用</small></span></button>
+    </div>
+    <input type="file" id="importFile" accept=".csv,text/csv" hidden>
+    <input type="file" id="migrateFile" accept=".json,application/json" hidden>
+    <div id="staffBox" hidden style="display:flex;flex-direction:column;gap:10px">
+      <div class="section-h">店員（只有負責人看得到）</div>
+      <div class="cards" id="staffList"></div>
+      <p class="hint">店員在登入畫面按「註冊帳號」並送出申請後，會出現在這裡等你核准。</p>
+    </div>
+    <div class="menu">
+      <button type="button" id="migrateBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><span>搬入舊資料<small>匯入從 Claude 頁面匯出的 JSON（只需一次）</small></span></button>
+      <button type="button" id="logoutBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></span><span>登出<small id="meLine"></small></span></button>
+    </div>
+    <div class="section-h">寄售品牌</div>
+    <div class="brandlist" id="brandList"></div>
+  </section>
+</main>
+
+<nav class="nav" aria-label="主選單"><div class="in">
+  <button type="button" data-tab="items" aria-selected="true"><svg class="i" viewBox="0 0 24 24"><path d="M3 7 12 3l9 4-9 4-9-4Z"/><path d="M3 7v10l9 4 9-4V7M12 11v10"/></svg>商品</button>
+  <button type="button" data-tab="log" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/></svg>紀錄</button>
+  <button type="button" class="fab" id="fab" aria-label="快速售出"><span class="ring"><svg class="i" viewBox="0 0 24 24"><path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/></svg></span>售出</button>
+  <button type="button" data-tab="settle" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><rect x="3" y="6" width="18" height="13" rx="2"/><path d="M3 10h18M16 15h2"/></svg>結算</button>
+  <button type="button" data-tab="more" aria-selected="false"><svg class="i" viewBox="0 0 24 24"><circle cx="5" cy="12" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="19" cy="12" r="1.5"/></svg>更多</button>
+</div></nav>
+
+<div id="modal" hidden></div>
+<div class="gate" id="gate"></div>
+<div class="toast" id="toast" hidden></div>
+
+
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+if(window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey) firebase.initializeApp(window.FIREBASE_CONFIG);
+
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const fmtN = n => (Math.round(Number(n||0)*100)/100).toLocaleString("zh-TW");
+const money = n => "$" + Math.round(Number(n||0)).toLocaleString("zh-TW");
+const pad = n => String(n).padStart(2,"0");
+const fmtT = ms => { const d=new Date(ms); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtHM = ms => { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const dayLabel = ms => { const d=new Date(ms), t=new Date(); t.setHours(0,0,0,0); const y=new Date(t); y.setDate(t.getDate()-1);
+  if(d>=t) return "今天"; if(d>=y) return "昨天"; return `${d.getMonth()+1}月${d.getDate()}日 週${"日一二三四五六"[d.getDay()]}`; };
+const monthKey = ms => { const d=new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth()+1)}`; };
+const brandKey = b => Array.from(new TextEncoder().encode(b||"(無品牌)")).map(x=>x.toString(16).padStart(2,"0")).join("").slice(0,180);
+const TYPE = {sale:"售出", in:"入庫", return:"退回店家", adjust:"盤點調整"};
+const DEFAULT_RATE = 30;
+const SVG = p => `<svg class="i" viewBox="0 0 24 24">${p}</svg>`;
+const TICON = {sale:SVG('<path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><circle cx="9" cy="20" r="1.5"/><circle cx="18" cy="20" r="1.5"/>'),
+  in:SVG('<path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16"/>'), return:SVG('<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'), adjust:SVG('<path d="M4 20h4L19 9l-4-4L4 16z"/>')};
+
+let db=null, user=null, dl=null, myId=null;
+let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, openBrand=null, brandFilter="", catFilter="", typeFilter="", curMonth=monthKey(Date.now()), curTab="items";
+
+function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
+function status(it){ const q=Number(it.qty||0), m=Number(it.min||0); if(q<=0) return "out"; if(m>0 && q<=m) return "low"; return ""; }
+function errText(e){ return e&&e.code==="not_granted" ? "你沒有編輯權限，請負責人把你加入。" : (e&&e.message)||String(e); }
+function splitSale(amount, rate){ const commission=Math.round(amount*rate/100); return {commission, payout:amount-commission}; }
+const brands = () => [...new Set(items.map(i=>i.brand||"").concat(brandDocs.map(b=>b.name||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant"));
+const needsPhoto = it => !!it.needsPhoto || brandDocs.some(b=>b.name===it.brand && b.needsPhoto);
+const liveSales = () => moves.filter(m=>m.type==="sale" && !m.void);
+const brandColor = b => { const list=brands(); const i=list.indexOf(b); return "c"+((i<0?[...String(b)].reduce((s,c)=>s+c.charCodeAt(0),0):i)%5+1); };
+const avatar = (b, label) => `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`;
+
+/* ---------- operator names ---------- */
+async function resolveNames(ids){
+  ids=[...new Set(ids.filter(id=>id && !(id in names)))];
+  if(!ids.length || !user) return;
+  try{ const ps=await user.profiles(ids); ids.forEach(id=>names[id]=(ps[id]&&ps[id].name)||""); renderLog(); }catch(e){}
+}
+const who = id => !id ? "" : (names[id] || (id===myId ? "我" : "店員"));
+
+/* ---------- render ---------- */
+function renderAll(){ renderSummary(); renderItems(); renderLog(); renderSettle(); renderMore(); }
+
+function renderSummary(){
+  const low=items.filter(status).length;
+  $("#sLow").textContent=low; $("#sLowBtn").setAttribute("aria-pressed",lowOnly);
+  const start=new Date(); start.setHours(0,0,0,0);
+  $("#sToday").textContent=money(liveSales().filter(m=>m.at>=start.getTime()).reduce((s,m)=>s+Number(m.amount||0),0));
+  const mk=monthKey(Date.now());
+  $("#sMonth").textContent=money(liveSales().filter(m=>monthKey(m.at)===mk).reduce((s,m)=>s+Number(m.commission||0),0));
+}
+
+function itemCard(i, pick){
+  const s=status(i);
+  return `<div class="card tap" tabindex="0" role="button" data-${pick?"pick":"act"}="${esc(i.id)}">
+    ${avatar(i.brand,i.name)}
+    <div class="body">
+      <span class="title">${esc(i.name)}</span>
+      <span class="meta">
+        ${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}
+        <span class="num">${money(i.price)}</span>
+        ${s==="out"?'<span class="tag out">缺貨</span>':s==="low"?'<span class="tag low">低庫存</span>':""}
+        ${needsPhoto(i)?'<span class="tag cam">需拍照</span>':""}
+      </span>
+      ${pick?"":`<span class="meta">${esc(i.brand||"")}${i.category?" · "+esc(i.category):""}</span>`}
+    </div>
+    <div class="right">
+      <span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span>
+      ${pick?"":`<button class="sell" type="button" data-sell="${esc(i.id)}" ${Number(i.qty)>0?"":"disabled"}>售出</button>`}
+    </div>
+  </div>`;
+}
+
+function renderItems(){
+  const bl=brands();
+  if(brandFilter && !bl.includes(brandFilter)) brandFilter="";
+  $("#brandChips").innerHTML=[`<button class="chip" type="button" data-bf="" aria-pressed="${!brandFilter}">全部 ${items.length}</button>`]
+    .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${esc(b)} ${items.filter(i=>i.brand===b).length}</button>`)).join("");
+  const cats=[...new Set(items.filter(i=>i.brand===brandFilter).map(i=>i.category||"").filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant",{numeric:true}));
+  if(catFilter && !cats.includes(catFilter)) catFilter="";
+  const cc=$("#catChips"); cc.hidden=!brandFilter||!cats.length;
+  cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${esc(c)} ${items.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
+  if(!db) return;
+  const q=$("#q").value.trim().toLowerCase();
+  const rows=items.filter(i=>(!brandFilter||i.brand===brandFilter)&&(!catFilter||i.category===catFilter)&&(!lowOnly||status(i))&&(!q||[i.name,i.sku,i.brand,i.category,i.note].join(" ").toLowerCase().includes(q)))
+    .sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||(status(x)?0:1)-(status(y)?0:1)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+  const list=$("#list");
+  if(!items.length){ list.innerHTML='<div class="empty"><b>還沒有商品</b>到「更多」新增商品，或匯入 Google 試算表的 CSV。</div>'; return; }
+  if(!rows.length){ list.innerHTML=`<div class="empty"><b>找不到商品</b>${lowOnly?"目前沒有低庫存的商品。":"換個關鍵字試試看。"}</div>`; return; }
+  list.innerHTML=rows.map(i=>itemCard(i,false)).join("");
+}
+
+function renderLog(){
+  if(!db) return;
+  const types=[["","全部"],["sale","售出"],["in","入庫"],["return","退回"],["adjust","調整"]];
+  $("#typeChips").innerHTML=types.map(([k,l])=>`<button class="chip" type="button" data-tf="${k}" aria-pressed="${typeFilter===k}">${l}</button>`).join("");
+  const q=$("#lq").value.trim().toLowerCase();
+  const rows=moves.filter(m=>(!typeFilter||m.type===typeFilter)&&(!q||[m.itemName,m.sku,m.brand,m.note].join(" ").toLowerCase().includes(q)));
+  if(!rows.length){ $("#logList").innerHTML='<div class="empty"><b>還沒有紀錄</b>售出、入庫或退回之後會出現在這裡。</div>'; return; }
+  let last="";
+  $("#logList").innerHTML=rows.map(m=>{
+    const d=dayLabel(m.at); const sep=d!==last?`<div class="daysep">${d}</div>`:""; last=d;
+    const sign=m.type==="sale"||m.type==="return"?"−":m.type==="in"||(m.type==="adjust"&&m.qty>0)?"+":"";
+    return sep+`<div class="card ${m.void?"void":""}">
+      <span class="ico ${esc(m.type)}">${TICON[m.type]||""}</span>
+      <div class="body">
+        <span class="title">${esc(m.itemName)}</span>
+        <span class="meta">${TYPE[m.type]||esc(m.type)}${m.void?"（已作廢）":""} · ${fmtHM(m.at)}${who(m.by)?" · "+esc(who(m.by)):""}${m.sku?` · #${esc(m.sku)}`:""}</span>
+        ${m.note?`<span class="meta">${esc(m.note)}</span>`:""}
+      </div>
+      <div class="right">
+        <span class="amt num">${m.type==="sale"?money(m.amount):`${sign}${fmtN(Math.abs(m.qty))}`}</span>
+        <span style="display:flex;gap:6px">${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}${m.type==="sale"&&!m.void?`<button class="mini" type="button" data-void="${esc(m.id)}">作廢</button>`:""}</span>
+      </div>
+    </div>`;
+  }).join("");
+}
+
+function settleRows(mk, all){
+  const by={};
+  if(all) brands().forEach(b=>by[b]={brand:b,count:0,amount:0,commission:0,payout:0,sales:[]});
+  liveSales().filter(m=>monthKey(m.at)===mk).forEach(m=>{
+    const b=m.brand||"(未填品牌)"; const r=by[b] ||= {brand:b,count:0,amount:0,commission:0,payout:0,sales:[]};
+    r.count+=Number(m.qty||0); r.amount+=Number(m.amount||0); r.commission+=Number(m.commission||0); r.payout+=Number(m.payout||0); r.sales.push(m);
+  });
+  return Object.values(by).sort((a,b)=>a.brand.localeCompare(b.brand,"zh-Hant"));
+}
+
+function renderSettle(){
+  const [y,mo]=curMonth.split("-"); $("#mLabel").textContent=`${y} 年 ${Number(mo)} 月`;
+  if(!db) return;
+  const rows=settleRows(curMonth,true); const sum=k=>rows.reduce((s,r)=>s+r[k],0);
+  $("#hero").innerHTML=`<div><span>銷售額</span><b class="num">${money(sum("amount"))}</b></div><div><span>我們抽成</span><b class="num">${money(sum("commission"))}</b></div><div><span>付給店家</span><b class="num">${money(sum("payout"))}</b></div>`;
+  if(!rows.length){ $("#settleList").innerHTML='<div class="empty"><b>還沒有品牌</b>新增商品後，每個品牌每月要付多少會列在這裡。</div>'; return; }
+  rows.sort((a,b)=>(b.count>0)-(a.count>0)||a.brand.localeCompare(b.brand,"zh-Hant"));
+  $("#settleList").innerHTML=rows.map(r=>{
+    const s=settles[`${curMonth}_${brandKey(r.brand)}`]; const paid=s&&s.paid; const open=openBrand===r.brand;
+    return `<div class="scard">
+      <div class="head" data-brand="${esc(r.brand)}" role="button" tabindex="0" aria-expanded="${open}">
+        ${avatar(r.brand)}
+        <div class="body"><span class="title">${esc(r.brand)}</span><span class="meta">${r.count?`售出 ${fmtN(r.count)} 件 ${paid?`<span class="tag ok">已付 ${esc(s.paidOn||"")}</span>`:'<span class="tag low">未付</span>'}`:"這個月沒有售出"}</span></div>
+        <svg class="i" viewBox="0 0 24 24" style="transform:rotate(${open?90:0}deg)"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">付給店家<b class="num">${money(r.payout)}</b></div></div>
+      ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtT(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
+      <div class="foot">${dl&&r.count?`<button class="payb" type="button" data-exb="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">匯出對帳單</button>`:""}${!r.count?"":paid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記已付</button>`}</div>
+    </div>`;
+  }).join("");
+}
+
+function renderMore(){
+  $("#brandList").innerHTML=brands().map(b=>`<span class="tag" style="font-size:14px;padding:6px 12px;display:inline-flex;align-items:center;gap:8px">${esc(b)}${brandDocs.some(x=>x.name===b&&x.needsPhoto)?' · 售出需拍照':""}</span>`).join("")||'<span class="hint">尚無品牌</span>';
+  const [y,mo]=curMonth.split("-"); $("#exportSettleSub").textContent=`${y} 年 ${Number(mo)} 月，給店家對帳用`;
+}
+
+/* ---------- modal ---------- */
+function closeModal(){ const m=$("#modal"); m.hidden=true; m.innerHTML=""; }
+function openModal(html, bind, wide){
+  const m=$("#modal"); m.innerHTML=`<div class="scrim"><div class="sheet" role="dialog" aria-modal="true">${html}</div></div>`; m.hidden=false;
+  m.querySelector(".scrim").addEventListener("click",e=>{ if(e.target.classList.contains("scrim")) closeModal(); });
+  bind && bind(m);
+}
+
+function actionSheet(it){
+  openModal(`<div style="display:flex;gap:12px;align-items:center">${avatar(it.brand,it.name)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
+    <div class="menu" style="box-shadow:none;background:var(--surface-2)">
+      <button type="button" id="aSell" ${Number(it.qty)>0?"":"disabled"}><span class="ico">${TICON.sale}</span><span>售出${needsPhoto(it)?"<small>這個商品售出要拍照</small>":""}</span></button>
+      <button type="button" id="aStock"><span class="ico">${TICON.in}</span><span>入庫／退回店家</span></button>
+      <button type="button" id="aEdit"><span class="ico">${TICON.adjust}</span><span>編輯商品<small>改價格、數量、編號，或刪除</small></span></button>
+    </div>
+    <button class="btn" type="button" id="aClose">關閉</button>`, m=>{
+    m.querySelector("#aSell").onclick=()=>sellForm(it);
+    m.querySelector("#aStock").onclick=()=>stockForm(it);
+    m.querySelector("#aEdit").onclick=()=>itemForm(it);
+    m.querySelector("#aClose").onclick=closeModal;
+  });
+}
+
+function quickSell(){
+  if(!db) return;
+  openModal(`<h2>要賣哪一件？</h2>
+    <label class="search" style="box-shadow:none;background:var(--surface-2)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="pq" type="search" placeholder="輸入編號或商品名稱" aria-label="搜尋要賣的商品"></label>
+    <div class="pickl" id="pickList"></div>
+    <button class="btn" type="button" id="pClose">取消</button>`, m=>{
+    const draw=()=>{ const q=m.querySelector("#pq").value.trim().toLowerCase();
+      const r=items.filter(i=>Number(i.qty)>0&&(!q||[i.name,i.sku,i.brand].join(" ").toLowerCase().includes(q)))
+        .sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+      m.querySelector("#pickList").innerHTML=r.length?r.slice(0,60).map(i=>itemCard(i,true)).join(""):'<p class="hint" style="text-align:center;padding:20px">找不到有庫存的商品</p>'; };
+    draw(); m.querySelector("#pq").oninput=draw; m.querySelector("#pClose").onclick=closeModal;
+  });
+}
+
+
+function itemForm(it){
+  const isNew=!it; it=it||{name:"",brand:"",price:"",qty:0,unit:"件",min:0,rate:DEFAULT_RATE,needsPhoto:false,note:""};
+  openModal(`
+    <h2>${isNew?"新增商品":"編輯商品"}</h2>
+    <form id="f" style="display:flex;flex-direction:column;gap:10px">
+      <label class="field">品牌（寄售店家）<input id="fBrand" required maxlength="40" list="brandList" value="${esc(it.brand)}"></label>
+      <datalist id="brandList">${brands().map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+      <label class="field">商品名稱<input id="fName" required maxlength="80" value="${esc(it.name)}"></label>
+      <div class="grid2">
+        <label class="field">分類（選填）<input id="fCat" maxlength="30" list="catList" value="${esc(it.category||"")}"></label>
+        <label class="field">商品編號（選填）<input id="fSku" maxlength="40" value="${esc(it.sku||"")}"></label>
+      </div>
+      <datalist id="catList">${[...new Set(items.map(i=>i.category).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+      <div class="grid2">
+        <label class="field">售價（元）<input id="fPrice" type="number" step="1" min="0" inputmode="numeric" required value="${esc(it.price)}"></label>
+        <label class="field">我們抽成 %<input id="fRate" type="number" step="any" min="0" max="100" value="${esc(it.rate??DEFAULT_RATE)}"></label>
+        <label class="field">${isNew?"目前數量":"數量（盤點修正）"}<input id="fQty" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.qty)}"></label>
+        <label class="field">單位<input id="fUnit" maxlength="8" value="${esc(it.unit||"件")}"></label>
+      </div>
+      <label class="field">安全庫存量（剩這個數量以下會提醒，0 表示不提醒）<input id="fMin" type="number" step="1" min="0" value="${esc(it.min)}"></label>
+      <label class="chk"><input type="checkbox" id="fPhoto" ${it.needsPhoto?"checked":""}>售出時一定要拍照</label>
+      <label class="field">備註<input id="fNote" maxlength="200" value="${esc(it.note)}"></label>
+      <p class="err" id="fErr" hidden></p>
+      <div class="acts">
+        ${isNew?"":'<button class="btn danger" type="button" id="fDel">刪除</button><span class="spacer"></span>'}
+        <button class="btn" type="button" id="fCancel">取消</button>
+        <button class="btn primary" type="submit" id="fSave">儲存</button>
+      </div>
+    </form>`, m=>{
+    m.querySelector("#fCancel").onclick=closeModal;
+    const showErr=e=>{ const p=m.querySelector("#fErr"); p.textContent="儲存失敗："+errText(e); p.hidden=false; };
+    const del=m.querySelector("#fDel");
+    if(del) del.onclick=async()=>{
+      if(del.dataset.armed!=="1"){ del.dataset.armed="1"; del.textContent="再按一次確認刪除"; return; }
+      try{ await db.collection("items").doc(it.id).delete(); closeModal(); toast("已刪除商品（過去的紀錄會保留）"); }catch(e){ showErr(e); }
+    };
+    m.querySelector("#f").onsubmit=async ev=>{
+      ev.preventDefault();
+      const v=id=>m.querySelector(id).value.trim();
+      const data={ brand:v("#fBrand"), name:v("#fName"), category:v("#fCat"), sku:v("#fSku"), price:Number(v("#fPrice")||0), rate:Number(v("#fRate")||0),
+        qty:Number(v("#fQty")||0), unit:v("#fUnit")||"件", min:Number(v("#fMin")||0), needsPhoto:m.querySelector("#fPhoto").checked,
+        note:v("#fNote"), updatedAt:Date.now() };
+      if(!data.name||!data.brand) return;
+      m.querySelector("#fSave").disabled=true;
+      try{
+        if(isNew){
+          const ref=await db.collection("items").add(data);
+          if(data.qty>0) await addMove({itemId:ref.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"in",qty:data.qty,after:data.qty,note:"建立商品（期初數量）"});
+        }else{
+          await db.collection("items").doc(it.id).update(data);
+          const diff=data.qty-Number(it.qty||0);
+          if(diff!==0) await addMove({itemId:it.id,itemName:data.name,sku:data.sku,brand:data.brand,type:"adjust",qty:diff,after:data.qty,note:"盤點調整"});
+        }
+        closeModal(); toast(isNew?"已新增商品":"已儲存");
+      }catch(e){ m.querySelector("#fSave").disabled=false; showErr(e); }
+    };
+  });
+}
+
+function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:Date.now()}); }
+
+async function compressPhoto(file){
+  const url=URL.createObjectURL(file);
+  try{
+    const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("讀不到這張照片")); i.src=url; });
+    let max=1100, q=0.72, out="";
+    for(let k=0;k<6;k++){
+      const s=Math.min(1,max/Math.max(img.naturalWidth,img.naturalHeight));
+      const c=document.createElement("canvas"); c.width=Math.round(img.naturalWidth*s); c.height=Math.round(img.naturalHeight*s);
+      c.getContext("2d").drawImage(img,0,0,c.width,c.height);
+      out=c.toDataURL("image/jpeg",q);
+      if(out.length<180000) return out;
+      max=Math.round(max*0.8); q=Math.max(0.5,q-0.06);
+    }
+    return out;
+  } finally { URL.revokeObjectURL(url); }
+}
+
+function sellForm(it){
+  const rate=Number(it.rate??DEFAULT_RATE);
+  openModal(`
+    <h2>售出：${esc(it.name)}</h2>
+    <p class="hint">${esc(it.brand||"")}　目前庫存 <b class="money">${fmtN(it.qty)}</b> ${esc(it.unit||"件")}</p>
+    <form id="s" style="display:flex;flex-direction:column;gap:10px">
+      <div class="grid2">
+        <label class="field">數量<input id="sQty" type="number" step="1" min="1" inputmode="numeric" value="1" required></label>
+        <label class="field">單價（可改成折扣價）<input id="sPrice" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.price)}" required></label>
+      </div>
+      <div class="split" aria-live="polite">
+        <div>銷售額<b id="sAmt">–</b></div>
+        <div>我們 ${fmtN(rate)}%<b id="sCom">–</b></div>
+        <div>店家 ${fmtN(100-rate)}%<b id="sPay">–</b></div>
+      </div>
+      <div class="field">照片${needsPhoto(it)?"（這個商品必須拍照）":"（選填）"}
+        <div class="photo-pick">
+          <label class="btn" for="sFile">拍照／選照片</label>
+          <input id="sFile" type="file" accept="image/*" capture="environment" hidden>
+          <img id="sPrev" alt="照片預覽" hidden>
+        </div>
+      </div>
+      <label class="field">備註（選填，例如客人、付款方式）<input id="sNote" maxlength="200"></label>
+      <p class="err" id="sErr" hidden></p>
+      <div class="acts"><button class="btn" type="button" id="sCancel">取消</button><button class="btn primary" type="submit" id="sSave">確認售出</button></div>
+    </form>`, m=>{
+    let photo=null;
+    const err=t=>{ const p=m.querySelector("#sErr"); p.textContent=t; p.hidden=!t; };
+    const calc=()=>{ const amt=Number(m.querySelector("#sQty").value||0)*Number(m.querySelector("#sPrice").value||0); const s=splitSale(amt,rate);
+      m.querySelector("#sAmt").textContent=money(amt); m.querySelector("#sCom").textContent=money(s.commission); m.querySelector("#sPay").textContent=money(s.payout); return {amt,...s}; };
+    calc(); m.querySelector("#sQty").oninput=calc; m.querySelector("#sPrice").oninput=calc;
+    m.querySelector("#sCancel").onclick=closeModal;
+    m.querySelector("#sFile").onchange=async e=>{
+      const f=e.target.files[0]; if(!f) return; err("");
+      try{ photo=await compressPhoto(f); const p=m.querySelector("#sPrev"); p.src=photo; p.hidden=false; }catch(x){ err(x.message); }
+    };
+    m.querySelector("#s").onsubmit=async ev=>{
+      ev.preventDefault();
+      const n=Number(m.querySelector("#sQty").value);
+      if(!(n>0)) return err("請輸入數量。");
+      if(needsPhoto(it) && !photo) return err(`${it.brand}的商品售出要拍照，請先拍一張。`);
+      const btn=m.querySelector("#sSave"); btn.disabled=true;
+      try{
+        const ref=db.collection("items").doc(it.id);
+        const cur=Number(((await ref.get()).data()||{}).qty||0);
+        if(n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}，不能賣 ${fmtN(n)}。`); }
+        const {amt,commission,payout}=calc(); const after=cur-n;
+        let photoId="";
+        if(photo){ const p=await db.collection("photos").add({data:photo,itemName:it.name,at:Date.now(),by:myId||""}); photoId=p.id; }
+        await ref.update({qty:after,updatedAt:Date.now()});
+        await addMove({itemId:it.id,itemName:it.name,brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,photoId,after,note:m.querySelector("#sNote").value.trim()});
+        closeModal(); toast(`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
+      }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
+    };
+  });
+}
+
+function stockForm(it){
+  openModal(`
+    <h2>${esc(it.name)}</h2>
+    <p class="hint">${esc(it.brand||"")}　目前庫存 <b class="money">${fmtN(it.qty)}</b> ${esc(it.unit||"件")}</p>
+    <form id="k" style="display:flex;flex-direction:column;gap:10px">
+      <div class="seg" role="group" aria-label="類型">
+        <button type="button" data-t="in" aria-pressed="true">店家送貨（入庫）</button>
+        <button type="button" data-t="return" aria-pressed="false">退回給店家</button>
+      </div>
+      <label class="field">數量<input id="kQty" type="number" step="1" min="1" inputmode="numeric" required></label>
+      <label class="field">備註（選填）<input id="kNote" maxlength="200"></label>
+      <p class="err" id="kErr" hidden></p>
+      <div class="acts"><button class="btn" type="button" id="kCancel">取消</button><button class="btn primary" type="submit" id="kSave">確定</button></div>
+    </form>`, m=>{
+    let t="in";
+    m.querySelectorAll(".seg button").forEach(b=>b.onclick=()=>{ t=b.dataset.t; m.querySelectorAll(".seg button").forEach(x=>x.setAttribute("aria-pressed",x===b)); });
+    m.querySelector("#kCancel").onclick=closeModal;
+    const err=s=>{ const p=m.querySelector("#kErr"); p.textContent=s; p.hidden=false; };
+    m.querySelector("#k").onsubmit=async ev=>{
+      ev.preventDefault();
+      const n=Number(m.querySelector("#kQty").value); if(!(n>0)) return err("請輸入數量。");
+      const btn=m.querySelector("#kSave"); btn.disabled=true;
+      try{
+        const ref=db.collection("items").doc(it.id);
+        const cur=Number(((await ref.get()).data()||{}).qty||0);
+        if(t==="return" && n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}。`); }
+        const after=t==="in"?cur+n:cur-n;
+        await ref.update({qty:after,updatedAt:Date.now()});
+        await addMove({itemId:it.id,itemName:it.name,brand:it.brand||"",type:t,qty:n,after,note:m.querySelector("#kNote").value.trim()});
+        closeModal(); toast(`${TYPE[t]} ${fmtN(n)}，結存 ${fmtN(after)}`);
+      }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
+    };
+  });
+}
+
+async function showPhoto(id){
+  openModal(`<h2>售出照片</h2><p class="hint" id="phInfo">載入中…</p><img class="bigphoto" id="ph" alt="售出照片" hidden><div class="acts"><button class="btn" type="button" id="phClose">關閉</button></div>`, m=>m.querySelector("#phClose").onclick=closeModal, true);
+  try{ const s=await db.collection("photos").doc(id).get(); const d=s.data();
+    if(!d){ $("#phInfo").textContent="找不到這張照片。"; return; }
+    $("#ph").src=d.data; $("#ph").hidden=false; $("#phInfo").textContent=`${d.itemName||""}　${fmtT(d.at)}`;
+  }catch(e){ $("#phInfo").textContent="讀取失敗："+errText(e); }
+}
+
+function voidSale(m){
+  openModal(`<h2>作廢這筆售出？</h2><p>${esc(m.itemName)}　${fmtN(m.qty)} 件　${money(m.amount)}</p><p class="hint">數量會加回庫存，結算也會扣掉這筆。</p><p class="err" id="vErr" hidden></p>
+    <div class="acts"><button class="btn" type="button" id="vNo">取消</button><button class="btn danger" type="button" id="vYes">作廢</button></div>`, md=>{
+    md.querySelector("#vNo").onclick=closeModal;
+    md.querySelector("#vYes").onclick=async()=>{
+      md.querySelector("#vYes").disabled=true;
+      try{
+        const ref=db.collection("items").doc(m.itemId); const s=await ref.get();
+        if(s.exists){ await ref.update({qty:Number((s.data()||{}).qty||0)+Number(m.qty||0),updatedAt:Date.now()}); }
+        await db.collection("moves").doc(m.id).update({void:true,voidBy:myId||"",voidAt:Date.now()});
+        closeModal(); toast("已作廢");
+      }catch(e){ const p=md.querySelector("#vErr"); p.textContent="作廢失敗："+errText(e); p.hidden=false; md.querySelector("#vYes").disabled=false; }
+    };
+  });
+}
+
+/* ---------- CSV import / export ---------- */
+function parseCSV(text){
+  const rows=[]; let row=[], f="", q=false;
+  text=text.replace(/^﻿/,"");
+  for(let i=0;i<text.length;i++){
+    const c=text[i];
+    if(q){ if(c==='"'){ if(text[i+1]==='"'){ f+='"'; i++; } else q=false; } else f+=c; }
+    else if(c==='"') q=true;
+    else if(c===","){ row.push(f); f=""; }
+    else if(c==="\n"||c==="\r"){ if(c==="\r"&&text[i+1]==="\n") i++; row.push(f); rows.push(row); row=[]; f=""; }
+    else f+=c;
+  }
+  if(f!==""||row.length){ row.push(f); rows.push(row); }
+  return rows.filter(r=>r.some(x=>x.trim()!==""));
+}
+const COLS={category:["分類","類別","種類","分區"],sku:["編號","貨號","型號","代號","SKU","sku"],min:["安全"],brand:["品牌","店家","寄售"],name:["商品","品名","名稱","品相"],price:["售價","價格","單價","定價"],qty:["數量","庫存","存量"],rate:["抽成"],unit:["單位"],note:["備註","說明"]};
+function mapHeader(h){
+  const idx={};
+  for(const [k,keys] of Object.entries(COLS)){ const i=h.findIndex((x,j)=>keys.some(w=>x.includes(w)) && !Object.values(idx).includes(j)); if(i>=0) idx[k]=i; }
+  return idx;
+}
+async function importCSV(file){
+  const rows=parseCSV(await file.text());
+  if(rows.length<2){ toast("檔案裡沒有資料"); return; }
+  const h=rows[0].map(s=>s.trim()); const idx=mapHeader(h);
+  if(idx.name==null){ toast("找不到「商品名稱」欄位"); return; }
+  const num=s=>Number(String(s||"").replace(/[^\d.\-]/g,""))||0;
+  const data=rows.slice(1).map(r=>({ brand:(r[idx.brand]??"").trim(), name:(r[idx.name]??"").trim(), sku:(r[idx.sku]??"").trim(), category:(r[idx.category]??"").trim(), price:num(r[idx.price]), qty:num(r[idx.qty]),
+    min:num(r[idx.min]), rate:idx.rate!=null&&String(r[idx.rate]).trim()!==""?num(r[idx.rate]):DEFAULT_RATE, unit:(r[idx.unit]??"").trim()||"件", note:(r[idx.note]??"").trim(), needsPhoto:false })).filter(d=>d.name);
+  const found=Object.keys(idx).map(k=>({category:"分類",sku:"商品編號",brand:"品牌",name:"商品名稱",price:"售價",qty:"數量",min:"安全庫存",rate:"抽成",unit:"單位",note:"備註"})[k]).join("、");
+  openModal(`<h2>匯入 ${data.length} 筆商品</h2>
+    <p class="hint">讀到的欄位：${esc(found)}${idx.brand==null?"<br><b>沒有品牌欄位</b>，匯入後請再補上品牌。":""}</p>
+    <div class="tablewrap"><table><thead><tr><th>品牌</th><th>編號</th><th>商品</th><th class="n">售價</th><th class="n">數量</th></tr></thead><tbody>
+    ${data.slice(0,8).map(d=>`<tr><td>${esc(d.brand)}</td><td>${esc(d.sku)}</td><td>${esc(d.name)}</td><td class="n">${money(d.price)}</td><td class="n">${fmtN(d.qty)}</td></tr>`).join("")}
+    ${data.length>8?`<tr><td colspan="5" class="hint">…還有 ${data.length-8} 筆</td></tr>`:""}</tbody></table></div>
+    <p class="err" id="iErr" hidden></p>
+    <div class="acts"><button class="btn" type="button" id="iNo">取消</button><button class="btn primary" type="button" id="iYes">全部匯入</button></div>`, m=>{
+    m.querySelector("#iNo").onclick=closeModal;
+    m.querySelector("#iYes").onclick=async()=>{
+      const b=m.querySelector("#iYes"); b.disabled=true; let done=0;
+      try{
+        for(const d of data){
+          const ref=await db.collection("items").add({...d,updatedAt:Date.now()});
+          if(d.qty>0) await addMove({itemId:ref.id,itemName:d.name,sku:d.sku,brand:d.brand,type:"in",qty:d.qty,after:d.qty,note:"匯入期初數量"});
+          done++; b.textContent=`匯入中 ${done}/${data.length}`;
+        }
+        closeModal(); toast(`已匯入 ${done} 筆商品`);
+      }catch(e){ const p=m.querySelector("#iErr"); p.textContent=`匯入到第 ${done+1} 筆失敗：${errText(e)}`; p.hidden=false; }
+    };
+  }, true);
+}
+const cell=v=>`"${String(v??"").replace(/"/g,'""')}"`;
+async function saveCSV(name, lines){
+  try{ await dl.save({filename:name, data:new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv"})}); }catch(e){ toast("沒有匯出"); }
+}
+
+
+/* ---------- events ---------- */
+document.addEventListener("click",e=>{
+  const g=(a)=>e.target.closest(`[${a}]`);
+  let el;
+  if(el=g("data-sell")){ const it=items.find(i=>i.id===el.dataset.sell); it&&sellForm(it); }
+  else if(el=g("data-pick")){ const it=items.find(i=>i.id===el.dataset.pick); it&&sellForm(it); }
+  else if(el=g("data-photo")){ showPhoto(el.dataset.photo); }
+  else if(el=g("data-void")){ const m=moves.find(x=>x.id===el.dataset.void); m&&voidSale(m); }
+  else if(el=g("data-pay")){ setPaid(el.dataset.pay,true); }
+  else if(el=g("data-unpay")){ setPaid(el.dataset.unpay,false); }
+  else if(el=g("data-exb")){ exportBrand(el.dataset.exb); }
+  else if(el=g("data-act")){ const it=items.find(i=>i.id===el.dataset.act); it&&actionSheet(it); }
+  else if(el=g("data-brand")){ openBrand=openBrand===el.dataset.brand?null:el.dataset.brand; renderSettle(); }
+  else if(el=g("data-bf")){ brandFilter=el.dataset.bf; catFilter=""; renderItems(); }
+  else if(el=g("data-cf")){ catFilter=el.dataset.cf; renderItems(); }
+  else if(el=g("data-tf")){ typeFilter=el.dataset.tf; renderLog(); }
+  else if(el=g("data-tab")){ showTab(el.dataset.tab); }
+});
+document.addEventListener("keydown",e=>{
+  if(e.key==="Escape"&&!$("#modal").hidden) closeModal();
+  if((e.key==="Enter"||e.key===" ")&&e.target.matches&&e.target.matches(".card.tap,.scard .head")){ e.preventDefault(); e.target.click(); }
+});
+async function setPaid(brand, paid){
+  const mk=curMonth; const r=settleRows(mk).find(x=>x.brand===brand);
+  const d=new Date();
+  try{ await db.collection("settlements").doc(`${mk}_${brandKey(brand)}`).set({month:mk,brand,paid,payout:r?r.payout:0,paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()});
+    toast(paid?`${brand} 標記為已付`:"已改回未付"); }catch(e){ toast("儲存失敗："+errText(e)); }
+}
+function exportBrand(brand){
+  const r=settleRows(curMonth).find(x=>x.brand===brand); if(!r||!dl) return;
+  const [y,mo]=curMonth.split("-"); const s=settles[`${curMonth}_${brandKey(brand)}`];
+  const a=[[`${brand} ${y}年${Number(mo)}月 寄售對帳單`].map(cell).join(","),"",
+    ["售出件數","銷售額","永樂抽成","應付店家","狀態"].map(cell).join(","),
+    [r.count,r.amount,r.commission,r.payout,s&&s.paid?`已付 ${s.paidOn||""}`:"未付"].map(cell).join(","),"",
+    ["日期","商品編號","商品","數量","單價","銷售額","永樂抽成","應付店家","備註"].map(cell).join(",")];
+  r.sales.slice().sort((x,z)=>x.at-z.at).forEach(m=>a.push([new Date(m.at).toLocaleDateString("zh-TW"),m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.note].map(cell).join(",")));
+  saveCSV(`${brand}_對帳單_${curMonth}.csv`, a);
+}
+const TITLES={items:"商品",log:"紀錄",settle:"結算",more:"更多"};
+function showTab(t){
+  curTab=t;
+  document.querySelectorAll(".nav [data-tab]").forEach(b=>b.setAttribute("aria-selected",b.dataset.tab===t));
+  ["items","log","settle","more"].forEach(k=>$("#p-"+k).hidden=k!==t);
+  $("#screenTitle").textContent=TITLES[t]; window.scrollTo(0,0);
+}
+function shiftMonth(n){ const [y,m]=curMonth.split("-").map(Number); const d=new Date(y,m-1+n,1); curMonth=monthKey(d.getTime()); openBrand=null; renderSettle(); renderMore(); }
+$("#mPrev").onclick=()=>shiftMonth(-1); $("#mNext").onclick=()=>shiftMonth(1);
+$("#fab").onclick=quickSell;
+$("#addBtn").onclick=()=>{ if(db) itemForm(null); };
+$("#importBtn").onclick=()=>{ if(db) $("#importFile").click(); };
+$("#importFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importCSV(f); };
+$("#q").oninput=renderItems; $("#lq").oninput=renderLog;
+$("#sLowBtn").onclick=()=>{ lowOnly=!lowOnly; renderSummary(); renderItems(); };
+renderItems(); renderSettle(); renderMore();
+
+
+/* ---------- boot (Firebase) ---------- */
+const auth = (window.FIREBASE_CONFIG && window.FIREBASE_CONFIG.apiKey) ? firebase.auth() : null;
+let staffDocs=[], requestDocs=[], meStaff=null, unsubs=[];
+const isOwner = () => meStaff && meStaff.role==="owner";
+const lower = s => String(s||"").trim().toLowerCase();
+
+dl = { save: async ({filename, data}) => {
+  const blob = data instanceof Blob ? data : new Blob([data]);
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob); a.download=filename;
+  document.body.appendChild(a); a.click(); setTimeout(()=>{ URL.revokeObjectURL(a.href); a.remove(); },1000);
+}};
+
+function gate(html){ const g=$("#gate"); g.innerHTML=html; g.hidden=!html; }
+function loginScreen(msg){
+  gate(`<div class="gatebox">
+    <img src="icon.svg" alt="" width="72" height="72">
+    <h1>永樂庫存</h1>
+    <form id="lg" class="gform">
+      <label class="field">Email<input id="lgE" type="email" autocomplete="username" required></label>
+      <label class="field">密碼<input id="lgP" type="password" autocomplete="current-password" minlength="6" required></label>
+      <p class="err" id="lgErr" ${msg?"":"hidden"}>${esc(msg||"")}</p>
+      <button class="btn primary" type="submit">登入</button>
+      <button class="btn" type="button" id="lgReg">第一次使用？註冊帳號</button>
+      <button class="linkbtn" type="button" id="lgForgot">忘記密碼</button>
+    </form></div>`);
+  const err=t=>{ const p=$("#lgErr"); p.textContent=t; p.hidden=!t; };
+  const msgOf=e=>({ "auth/invalid-credential":"Email 或密碼不對。", "auth/wrong-password":"Email 或密碼不對。", "auth/user-not-found":"找不到這個帳號，請先註冊。",
+    "auth/email-already-in-use":"這個 Email 已經註冊過，直接登入就好。", "auth/weak-password":"密碼至少要 6 個字。", "auth/invalid-email":"Email 格式不對。",
+    "auth/network-request-failed":"沒有網路，請連上網路再試。", "auth/too-many-requests":"嘗試太多次，請稍後再試。" }[e.code] || e.message);
+  $("#lg").onsubmit=async e=>{ e.preventDefault(); err("");
+    try{ await auth.signInWithEmailAndPassword($("#lgE").value.trim(), $("#lgP").value); }catch(x){ err(msgOf(x)); } };
+  $("#lgReg").onclick=async()=>{ err("");
+    const em=$("#lgE").value.trim(), pw=$("#lgP").value;
+    if(!em||pw.length<6) return err("請先填 Email 和至少 6 個字的密碼，再按註冊。");
+    try{ await auth.createUserWithEmailAndPassword(em,pw); }catch(x){ err(msgOf(x)); } };
+  $("#lgForgot").onclick=async()=>{ const em=$("#lgE").value.trim(); if(!em) return err("請先填 Email。");
+    try{ await auth.sendPasswordResetEmail(em); err("已寄出重設密碼的信，請收信。"); }catch(x){ err(msgOf(x)); } };
+}
+
+async function waitingScreen(u){
+  const em=lower(u.email);
+  let setupDone=true;
+  try{ setupDone=(await db.collection("config").doc("setup").get()).exists; }catch(e){}
+  if(!setupDone){
+    gate(`<div class="gatebox"><h1>設定負責人</h1><p>這是第一次使用。你（${esc(u.email)}）會成為負責人，可以核准店員、看結算和搬家匯入。</p>
+      <label class="field">你的名字<input id="ow" maxlength="20" placeholder="例如：小許"></label>
+      <p class="err" id="owErr" hidden></p>
+      <button class="btn primary" type="button" id="owGo">我是負責人，開始使用</button>
+      <button class="linkbtn" type="button" id="lo">登出</button></div>`);
+    $("#lo").onclick=()=>auth.signOut();
+    $("#owGo").onclick=async()=>{
+      const b=db.batch();
+      b.set(db.collection("staff").doc(em),{email:em,name:$("#ow").value.trim()||u.email,role:"owner",uid:u.uid,at:Date.now()});
+      b.set(db.collection("config").doc("setup"),{owner:em,at:Date.now()});
+      try{ await b.commit(); start(u); }catch(x){ const p=$("#owErr"); p.textContent="設定失敗："+x.message; p.hidden=false; }
+    };
+    return;
+  }
+  gate(`<div class="gatebox"><h1>等待負責人核准</h1>
+    <p>你的帳號 ${esc(u.email)} 已經註冊。請負責人打開 App，到「更多 → 店員」按「核准」。</p>
+    <label class="field">你的名字（負責人核准時會看到）<input id="rqN" maxlength="20" placeholder="例如：小美"></label>
+    <button class="btn primary" type="button" id="rqGo">送出申請</button>
+    <p class="hint" id="rqMsg"></p>
+    <button class="btn" type="button" id="rqCheck">已經核准了，重新檢查</button>
+    <button class="linkbtn" type="button" id="lo">登出</button></div>`);
+  $("#lo").onclick=()=>auth.signOut();
+  $("#rqCheck").onclick=()=>start(u);
+  $("#rqGo").onclick=async()=>{
+    try{ await db.collection("requests").doc(em).set({email:em,name:$("#rqN").value.trim(),uid:u.uid,at:Date.now()}); $("#rqMsg").textContent="已送出，請等負責人核准。"; }
+    catch(x){ $("#rqMsg").textContent="送出失敗："+x.message; }
+  };
+}
+
+function subscribe(){
+  unsubs.forEach(f=>f()); unsubs=[];
+  const conn=$("#conn");
+  const ok=()=>{ conn.textContent=navigator.onLine?"已同步":"離線中"; conn.className="sync "+(navigator.onLine?"ok":"bad"); };
+  ok(); window.addEventListener("online",ok); window.addEventListener("offline",ok);
+  unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderItems(); renderMore(); },
+    e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
+  unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
+  unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>d.data()||{}); renderItems(); renderMore(); }, ()=>{}));
+  unsubs.push(db.collection("settlements").onSnapshot(s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); renderSettle(); }, ()=>{}));
+  unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));
+  if(isOwner()) unsubs.push(db.collection("requests").onSnapshot(s=>{ requestDocs=s.docs.map(d=>d.data()); renderStaff(); }, ()=>{}));
+}
+
+function renderStaff(){
+  const box=$("#staffBox"); if(!box) return;
+  box.hidden=!isOwner(); if(!isOwner()) return;
+  $("#staffList").innerHTML=requestDocs.map(r=>`<div class="card"><span class="av c2">${esc([...(r.name||r.email)][0])}</span><div class="body"><span class="title">${esc(r.name||"（沒填名字）")}</span><span class="meta">${esc(r.email)} · 申請中</span></div><div class="right" style="flex-direction:row"><button class="mini" type="button" data-deny="${esc(r.email)}">拒絕</button><button class="sell" type="button" data-approve="${esc(r.email)}">核准</button></div></div>`).join("")
+    + staffDocs.map(s=>`<div class="card"><span class="av c4">${esc([...(s.name||s.email)][0])}</span><div class="body"><span class="title">${esc(s.name||s.email)}</span><span class="meta">${esc(s.email)} · ${s.role==="owner"?"負責人":"店員"}</span></div>${s.role==="owner"?"":`<button class="mini" type="button" data-unstaff="${esc(s.email)}">移除</button>`}</div>`).join("");
+}
+document.addEventListener("click", async e=>{
+  const g=a=>e.target.closest(`[${a}]`); let el;
+  try{
+    if(el=g("data-approve")){ const r=requestDocs.find(x=>x.email===el.dataset.approve); if(!r) return;
+      const b=db.batch(); b.set(db.collection("staff").doc(r.email),{email:r.email,name:r.name||r.email,role:"staff",uid:r.uid||"",at:Date.now()}); b.delete(db.collection("requests").doc(r.email)); await b.commit(); toast(`已核准 ${r.name||r.email}`); }
+    else if(el=g("data-deny")){ await db.collection("requests").doc(el.dataset.deny).delete(); toast("已拒絕"); }
+    else if(el=g("data-unstaff")){ if(el.dataset.armed!=="1"){ el.dataset.armed="1"; el.textContent="再按一次"; return; } await db.collection("staff").doc(el.dataset.unstaff).delete(); toast("已移除"); }
+  }catch(x){ toast("失敗："+x.message); }
+});
+
+/* one-time move from the old Claude page: reads the export JSON and writes everything */
+async function importMigration(file){
+  let data; try{ data=JSON.parse(await file.text()); }catch(e){ toast("讀不到這個檔案"); return; }
+  const cols=["items","moves","brands","settlements","photos"].filter(c=>Array.isArray(data[c]));
+  const total=cols.reduce((s,c)=>s+data[c].length,0);
+  openModal(`<h2>搬入舊資料</h2><p>${cols.map(c=>`${({items:"商品",moves:"紀錄",brands:"品牌",settlements:"結算",photos:"照片"})[c]} ${data[c].length} 筆`).join("、")}</p>
+    <p class="hint">同一個 id 的資料會被覆蓋，重複匯入不會多出重複的商品。</p><p class="err" id="mgErr" hidden></p>
+    <div class="acts"><button class="btn" type="button" id="mgNo">取消</button><button class="btn primary" type="button" id="mgGo">開始匯入</button></div>`, m=>{
+    m.querySelector("#mgNo").onclick=closeModal;
+    m.querySelector("#mgGo").onclick=async()=>{
+      const btn=m.querySelector("#mgGo"); btn.disabled=true; let done=0;
+      try{
+        for(const c of cols){ for(let i=0;i<data[c].length;i+=400){
+          const b=db.batch(); data[c].slice(i,i+400).forEach(({id,...rest})=>b.set(db.collection(c).doc(id),rest)); await b.commit();
+          done+=Math.min(400,data[c].length-i); btn.textContent=`匯入中 ${done}/${total}`; } }
+        closeModal(); toast(`已匯入 ${done} 筆`);
+      }catch(x){ const p=m.querySelector("#mgErr"); p.textContent="匯入失敗："+x.message; p.hidden=false; btn.disabled=false; }
+    };
+  });
+}
+
+async function start(u){
+  const em=lower(u.email);
+  let s=null; try{ s=await db.collection("staff").doc(em).get(); }catch(e){}
+  if(!s||!s.exists){ waitingScreen(u); return; }
+  meStaff=s.data(); myId=u.uid;
+  if(meStaff.uid!==u.uid){ try{ await db.collection("staff").doc(em).update({uid:u.uid}); }catch(e){} }
+  gate("");
+  $("#meLine").textContent=`${meStaff.name||u.email}（${isOwner()?"負責人":"店員"}）`;
+  $("#migrateBtn").hidden=!isOwner();
+  subscribe(); renderSettle(); renderStaff();
+}
+
+$("#logoutBtn").onclick=()=>auth&&auth.signOut();
+$("#migrateBtn").onclick=()=>$("#migrateFile").click();
+$("#migrateFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importMigration(f); };
+$("#exportItemsBtn").hidden=false; $("#exportSettleBtn").hidden=false;
+$("#exportItemsBtn").onclick=()=>{
+  const a=[["品牌","分類","商品編號","商品名稱","售價","抽成%","數量","單位","安全庫存","售出需拍照","備註"].map(cell).join(",")]
+    .concat(items.map(i=>[i.brand,i.category,i.sku,i.name,i.price,i.rate??DEFAULT_RATE,i.qty,i.unit,i.min,needsPhoto(i)?"是":"",i.note].map(cell).join(",")));
+  saveCSV(`永樂商品清單_${monthKey(Date.now())}.csv`, a);
+};
+$("#exportSettleBtn").onclick=()=>{
+  const mk=curMonth; const rows=settleRows(mk);
+  const a=[["品牌","售出件數","銷售額","我們抽成","付給店家","狀態"].map(cell).join(",")];
+  rows.forEach(r=>{ const s=settles[`${mk}_${brandKey(r.brand)}`]; a.push([r.brand,r.count,r.amount,r.commission,r.payout,s&&s.paid?"已付":"未付"].map(cell).join(",")); });
+  a.push(""); a.push(["時間","品牌","商品編號","商品","數量","單價","銷售額","我們抽成","付給店家","操作人","備註"].map(cell).join(","));
+  rows.forEach(r=>r.sales.forEach(m=>a.push([new Date(m.at).toLocaleString("zh-TW"),m.brand,m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,who(m.by),m.note].map(cell).join(","))));
+  saveCSV(`永樂結算_${mk}.csv`, a);
+};
+
+if(!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey){
+  gate(`<div class="gatebox"><h1>永樂庫存</h1><p>還沒設定資料庫。請把 Firebase 的 firebaseConfig 填進 firebase-config.js。</p></div>`);
+}else{
+  db = firebase.firestore();
+  db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+  loginScreen();
+  auth.onAuthStateChanged(u=>{ unsubs.forEach(f=>f()); unsubs=[]; meStaff=null; if(u) start(u); else loginScreen(); });
+}
+if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js").catch(()=>{});
+</script>
+</body>
+</html>

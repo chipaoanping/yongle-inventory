@@ -1,0 +1,40 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    function signedIn() { return request.auth != null && request.auth.token.email != null; }
+    function myEmail() { return request.auth.token.email.lower(); }
+    function staffPath() { return /databases/$(database)/documents/staff/$(myEmail()); }
+    function isStaff() { return signedIn() && exists(staffPath()); }
+    function isOwner() { return isStaff() && get(staffPath()).data.role == 'owner'; }
+    function setupPath() { return /databases/$(database)/documents/config/setup; }
+
+    // 第一次使用：第一個登入的人設定自己為負責人（只能發生一次）
+    match /config/setup {
+      allow read: if signedIn();
+      allow create: if signedIn() && !exists(setupPath())
+        && request.resource.data.owner == myEmail()
+        && getAfter(staffPath()).data.role == 'owner';
+      allow update, delete: if false;
+    }
+
+    match /staff/{email} {
+      allow read: if isStaff() || (signedIn() && email == myEmail());
+      allow create: if isOwner()
+        || (signedIn() && email == myEmail() && request.resource.data.role == 'owner'
+            && !exists(setupPath()) && existsAfter(setupPath()));
+      allow update: if isOwner()
+        || (signedIn() && email == myEmail() && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['uid']));
+      allow delete: if isOwner() && email != myEmail();
+    }
+
+    // 店員註冊後送出的申請
+    match /requests/{email} {
+      allow read, delete: if isOwner() || (signedIn() && email == myEmail());
+      allow create, update: if signedIn() && email == myEmail();
+    }
+
+    match /{col}/{id} {
+      allow read, write: if isStaff() && !(col in ['staff', 'requests', 'config']);
+    }
+  }
+}
