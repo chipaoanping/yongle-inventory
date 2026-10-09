@@ -161,6 +161,7 @@ button.stat{cursor:pointer}
 .sheet form{display:flex;flex-direction:column;gap:12px}
 .field{display:flex;flex-direction:column;gap:6px;font-size:14px;font-weight:500;color:var(--muted)}
 input,select,textarea{font:inherit;font-size:16px;color:var(--ink);background:var(--surface-2);border:2px solid transparent;border-radius:12px;padding:11px 12px;min-width:0;width:100%}
+select{appearance:none;-webkit-appearance:none;padding-right:38px;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%2386705e' stroke-width='2.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center;background-size:18px}
 input:focus,select:focus{outline:none;border-color:var(--accent)}
 button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
 .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
@@ -634,18 +635,17 @@ function quickSell(){
 
 
 function itemForm(it){
-  const isNew=!it; it=it||{name:"",brand:"",price:"",qty:0,unit:"件",min:0,rate:DEFAULT_RATE,needsPhoto:false,note:""};
+  const isNew=!it; it=it||{name:"",brand:brandFilter||"",category:catFilter||"",price:"",qty:0,unit:"件",min:0,rate:DEFAULT_RATE,needsPhoto:false,note:""};
   openModal(`
     <h2>${isNew?"新增商品":"編輯商品"}</h2>
     <form id="f" style="display:flex;flex-direction:column;gap:10px">
-      <label class="field">品牌（寄售店家）<input id="fBrand" required maxlength="40" list="brandList" value="${esc(it.brand)}"></label>
-      <datalist id="brandList">${brands().map(b=>`<option value="${esc(b)}">`).join("")}</datalist>
+      <label class="field">品牌（寄售店家）<select id="fBrand" required><option value="" disabled ${it.brand?"":"selected"}>請選擇品牌</option>${brands().map(b=>`<option value="${esc(b)}" ${b===it.brand?"selected":""}>${esc(b)}</option>`).join("")}</select></label>
+      ${brands().length?"":'<p class="hint">還沒有品牌，請先到「更多 → 寄售品牌與分類」新增品牌。</p>'}
       <label class="field">商品名稱<input id="fName" required maxlength="80" value="${esc(it.name)}"></label>
       <div class="grid2">
-        <label class="field">分類（選填）<input id="fCat" maxlength="30" list="catList" value="${esc(it.category||"")}"></label>
+        <label class="field">分類<select id="fCat"></select></label>
         <label class="field">商品編號（選填）<input id="fSku" maxlength="40" value="${esc(it.sku||"")}"></label>
       </div>
-      <datalist id="catList"></datalist>
       <div class="grid2">
         <label class="field">售價（元）<input id="fPrice" type="number" step="1" min="0" inputmode="numeric" required value="${esc(it.price)}"></label>
         <label class="field">我們抽成 %<input id="fRate" type="number" step="any" min="0" max="100" value="${esc(it.rate??DEFAULT_RATE)}"></label>
@@ -663,8 +663,10 @@ function itemForm(it){
       </div>
     </form>`, m=>{
     m.querySelector("#fCancel").onclick=closeModal;
-    const fillCats=()=>{ m.querySelector("#catList").innerHTML=catsOf(m.querySelector("#fBrand").value.trim()).map(c=>`<option value="${esc(c)}">`).join(""); };
-    fillCats(); m.querySelector("#fBrand").oninput=fillCats;
+    let curCat=it.category||"";
+    const fillCats=()=>{ const cs=catsOf(m.querySelector("#fBrand").value); if(curCat&&!cs.includes(curCat)) cs.push(curCat);
+      m.querySelector("#fCat").innerHTML=`<option value="">未分類</option>`+cs.map(c=>`<option value="${esc(c)}" ${c===curCat?"selected":""}>${esc(c)}</option>`).join(""); };
+    fillCats(); m.querySelector("#fBrand").onchange=()=>{ curCat=""; fillCats(); };
     const showErr=e=>{ const p=m.querySelector("#fErr"); p.textContent="儲存失敗："+errText(e); p.hidden=false; };
     const del=m.querySelector("#fDel");
     if(del) del.onclick=async()=>{
