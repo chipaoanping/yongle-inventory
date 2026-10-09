@@ -33,6 +33,11 @@ service cloud.firestore {
       allow create, update: if signedIn() && email == myEmail();
     }
 
+    // 廠商看庫存的連結：知道連結的人可以讀那一份（不能列出全部）
+    match /vendorViews/{token} {
+      allow get: if true;
+    }
+
     match /{col}/{id} {
       allow read, write: if isStaff() && !(col in ['staff', 'requests', 'config']);
     }

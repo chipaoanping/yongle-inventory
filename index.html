@@ -468,6 +468,51 @@ function actionSheet(it){
   });
 }
 
+/* ---------- vendor stock links ---------- */
+// Each brand with a viewToken gets a public read-only doc vendorViews/{token} holding only stock fields. Any signed-in staff device keeps it current.
+const vendorSent={};
+const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件"}))
+  .sort((x,y)=>String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true})));
+let vendorTimer=null, itemsFresh=false;
+function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout(syncVendorViews,1500); }
+async function syncVendorViews(){
+  if(!db||!itemsFresh) return;
+  for(const d of brandDocs){ if(!d.viewToken||!d.name) continue;
+    const json=vendorPayload(d.name); const key=d.viewToken+"|"+d.name;
+    if(vendorSent[key]===json) continue;
+    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,items:JSON.parse(json),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
+  }
+}
+const vendorUrl = t => new URL("vendor.html?t="+t, location.href).href;
+const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16))).map(x=>x.toString(16).padStart(2,"0")).join("");
+function vendorBox(name){
+  const d=brandDoc(name)||{};
+  return d.viewToken
+    ? `<input readonly value="${esc(vendorUrl(d.viewToken))}" aria-label="廠商連結" onclick="this.select()">
+       <div class="acts"><button class="btn primary" type="button" data-vl="copy">${navigator.share?"分享連結":"複製連結"}</button><button class="btn" type="button" data-vl="renew">換新連結</button><button class="btn danger" type="button" data-vl="off">關閉</button></div>
+       <p class="hint">廠商打開這個連結，只看得到「${esc(name)}」的商品、編號、售價和剩幾件，看不到售出紀錄、金額和照片。換新連結後，舊連結就打不開了。</p>`
+    : `<button class="btn" type="button" data-vl="make">建立廠商看庫存的連結</button>
+       <p class="hint">建立後把連結傳給廠商，他們不用註冊就能看自己品牌的庫存。</p>`;
+}
+async function vendorAction(name, act, box){
+  const d=brandDoc(name)||{};
+  try{
+    if(act==="copy"){ const u=vendorUrl(d.viewToken);
+      if(navigator.share){ try{ await navigator.share({title:`${name} 寄售庫存`,url:u}); }catch(e){} }
+      else { await navigator.clipboard.writeText(u); toast("已複製連結"); } return; }
+    if(act==="renew"&&box.dataset.armed!=="renew"){ box.dataset.armed="renew"; box.querySelector('[data-vl="renew"]').textContent="再按一次換新"; return; }
+    if(act==="off"&&box.dataset.armed!=="off"){ box.dataset.armed="off"; box.querySelector('[data-vl="off"]').textContent="再按一次關閉"; return; }
+    const ops=[]; if(d.viewToken) ops.push({ref:db.collection("vendorViews").doc(d.viewToken),del:true});
+    const tok=act==="off"?"":newToken(); const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
+    ops.push({ref:bref,data:d.id?{viewToken:tok}:{name,viewToken:tok}});
+    if(tok) ops.push({ref:db.collection("vendorViews").doc(tok),data:{brand:name,items:JSON.parse(vendorPayload(name)),updatedAt:Date.now()}});
+    await commitOps(ops);
+    if(d.id) d.viewToken=tok; else brandDocs.push({id:bref.id,name,viewToken:tok});
+    delete box.dataset.armed; box.innerHTML=vendorBox(name);
+    toast(act==="off"?"已關閉連結":act==="renew"?"已換新連結，舊連結失效了":"已建立連結");
+  }catch(e){ toast("失敗："+errText(e)); }
+}
+
 /* ---------- brands & categories ---------- */
 async function commitOps(ops){
   for(let i=0;i<ops.length;i+=400){ const b=db.batch(); ops.slice(i,i+400).forEach(o=>o.del?b.delete(o.ref):b.set(o.ref,o.data,{merge:true})); await b.commit(); }
@@ -483,6 +528,7 @@ function brandForm(name){
       <label class="chk"><input type="checkbox" id="bPhoto" ${d.needsPhoto?"checked":""}>這個品牌每件售出都要拍照</label>
       <div class="field">分類<div id="bCats" style="display:flex;flex-direction:column;gap:8px">${(name?catsOf(name):[]).map(c=>row(c,its.filter(i=>i.category===c).length)).join("")}</div>
         <button class="btn" type="button" id="bAddCat">＋ 新增分類</button></div>
+      ${!isNew&&isOwner()?`<div class="field">廠商看庫存的連結<div id="bVend" style="display:flex;flex-direction:column;gap:8px">${vendorBox(name)}</div></div>`:""}
       <p class="hint">分類改名會一起改掉商品上的分類；刪除分類時，商品會保留，只是變成「未分類」。</p>
       <p class="err" id="bErr" hidden></p>
       <div class="acts">
@@ -493,6 +539,7 @@ function brandForm(name){
     </form>`, m=>{
     const err=t=>{ const p=m.querySelector("#bErr"); p.textContent=t; p.hidden=!t; };
     m.querySelector("#bCancel").onclick=closeModal;
+    const vb=m.querySelector("#bVend"); if(vb) vb.addEventListener("click",e=>{ const b=e.target.closest("[data-vl]"); if(b) vendorAction(name,b.dataset.vl,vb); });
     m.querySelector("#bAddCat").onclick=()=>{ m.querySelector("#bCats").insertAdjacentHTML("beforeend",row("",0)); const r=m.querySelector("#bCats").lastElementChild; r.dataset.old=""; r.querySelector(".n").textContent=""; r.querySelector("input").focus(); };
     m.querySelector("#bCats").addEventListener("click",e=>{ const b=e.target.closest("[data-rm]"); if(!b) return; const r=b.closest(".catrow");
       if(!r.dataset.old){ r.remove(); return; }
@@ -501,7 +548,7 @@ function brandForm(name){
     if(del) del.onclick=async()=>{
       if(its.length) return err(`這個品牌還有 ${its.length} 件商品，請先把商品刪除或改到別的品牌。過去的售出紀錄會保留。`);
       if(del.dataset.armed!=="1"){ del.dataset.armed="1"; del.textContent="再按一次確認刪除"; return; }
-      try{ if(d.id) await db.collection("brands").doc(d.id).delete(); closeModal(); toast("已刪除品牌"); }catch(e){ err("刪除失敗："+errText(e)); }
+      try{ const ops=[]; if(d.viewToken) ops.push({ref:db.collection("vendorViews").doc(d.viewToken),del:true}); if(d.id) ops.push({ref:db.collection("brands").doc(d.id),del:true}); await commitOps(ops); closeModal(); toast("已刪除品牌"); }catch(e){ err("刪除失敗："+errText(e)); }
     };
     m.querySelector("#b").onsubmit=async ev=>{
       ev.preventDefault(); err("");
@@ -937,10 +984,10 @@ function subscribe(){
   const conn=$("#conn");
   const ok=()=>{ conn.textContent=navigator.onLine?"已同步":"離線中"; conn.className="sync "+(navigator.onLine?"ok":"bad"); };
   ok(); window.addEventListener("online",ok); window.addEventListener("offline",ok);
-  unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderItems(); renderMore(); },
+  unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); itemsFresh=!(s.metadata&&s.metadata.fromCache); renderSummary(); renderItems(); renderMore(); scheduleVendorSync(); },
     e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
   unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
-  unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); }, ()=>{}));
+  unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); scheduleVendorSync(); }, ()=>{}));
   unsubs.push(db.collection("settlements").onSnapshot(s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));
   if(isOwner()) unsubs.push(db.collection("requests").onSnapshot(s=>{ requestDocs=s.docs.map(d=>d.data()); renderStaff(); }, ()=>{}));

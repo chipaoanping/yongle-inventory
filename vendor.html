@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#0f7a68">
+<meta name="robots" content="noindex">
+<title>永樂寄售庫存</title>
+<link rel="icon" href="icon.svg" type="image/svg+xml">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;500;700;900&display=swap">
+<style>
+:root{padding-top:env(safe-area-inset-top,0px);padding-bottom:0}
+body{margin:0}
+img{max-width:100%}
+
+/* Layout: a phone app. Sticky top bar, one scrolling screen per tab, fixed bottom nav with a raised 售出 button in the middle. */
+:root{
+  --bg:#f3f5f4; --surface:#ffffff; --surface-2:#eaefed; --ink:#14231f; --muted:#65766f; --line:#dfe6e3;
+  --accent:#0f7a68; --accent-ink:#ffffff; --accent-soft:#d8efe9;
+  --warn:#b45309; --warn-soft:#fdefd9; --bad:#c02c1d; --bad-soft:#fde4e1; --good:#1d7f3e; --good-soft:#dcf3e3;
+  --b1:#c2410c; --b1s:#ffe8d9; --b2:#be185d; --b2s:#fde3ef; --b3:#6d28d9; --b3s:#ece4fd; --b4:#0369a1; --b4s:#dcf0fb; --b5:#4d7c0f; --b5s:#e9f5d6;
+  --shadow:0 1px 2px rgba(20,35,31,.06),0 4px 14px rgba(20,35,31,.06);
+  --scrim:rgba(10,20,18,.45);
+  --f-body:"Noto Sans TC","PingFang TC","Microsoft JhengHei",system-ui,sans-serif;
+  --nav-h:64px;
+}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){
+  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
+  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
+  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
+  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}}
+:root[data-theme="dark"]{
+  --bg:#0d1412; --surface:#17201d; --surface-2:#202b27; --ink:#e6eeeb; --muted:#94a7a0; --line:#2a3733;
+  --accent:#45c2aa; --accent-ink:#06120f; --accent-soft:#183a33;
+  --warn:#f3aa52; --warn-soft:#3b2b14; --bad:#f4877d; --bad-soft:#3f1d1a; --good:#73d391; --good-soft:#17331f;
+  --b1:#fb9a64; --b1s:#3a2316; --b2:#f47fb3; --b2s:#3a1a29; --b3:#b49cfa; --b3s:#2a2142; --b4:#6cc3f0; --b4s:#14303f; --b5:#a6d86a; --b5s:#25331a;
+  --shadow:0 1px 2px rgba(0,0,0,.4); --scrim:rgba(0,0,0,.6); color-scheme:dark}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+[hidden]{display:none!important}
+body{background:var(--bg);color:var(--ink);font-family:var(--f-body);font-size:16px;line-height:1.5}
+.num{font-variant-numeric:tabular-nums}
+svg.i{width:22px;height:22px;flex:none;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+
+/* top bar */
+.top{position:sticky;top:env(safe-area-inset-top,0px);z-index:5;background:var(--bg);padding-inline:16px;padding-block:12px 8px;display:flex;align-items:center;gap:10px;max-width:640px;margin:0 auto}
+.top h1{margin:0;font-size:22px;font-weight:900;letter-spacing:.04em}
+.top .sub{font-size:13px;color:var(--muted);font-weight:500}
+.top .grow{flex:1}
+.sync{display:flex;align-items:center;gap:6px;font-size:12px;color:var(--muted)}
+.sync::before{content:"";width:8px;height:8px;border-radius:50%;background:var(--muted)}
+.sync.ok::before{background:var(--good)} .sync.bad::before{background:var(--bad)}
+
+main{max-width:640px;margin:0 auto;padding-inline:16px;padding-block:4px calc(var(--nav-h) + 40px + env(safe-area-inset-bottom,0px))}
+.screen{display:flex;flex-direction:column;gap:14px}
+
+/* stats */
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.stat{background:var(--surface);border-radius:16px;padding:12px;box-shadow:var(--shadow);display:flex;flex-direction:column;gap:2px;border:0;font:inherit;color:inherit;text-align:left;min-width:0}
+.stat .k{font-size:12px;color:var(--muted);font-weight:500}
+.stat .v{font-size:20px;font-weight:900;overflow-wrap:anywhere}
+.stat.money .v{color:var(--accent)}
+button.stat{cursor:pointer}
+.stat.alert .v{color:var(--warn)}
+.stat.alert[aria-pressed="true"]{outline:2px solid var(--warn)}
+
+/* search + chips */
+.search{display:flex;align-items:center;gap:8px;background:var(--surface);border-radius:14px;padding:0 14px;box-shadow:var(--shadow);color:var(--muted)}
+.search input{flex:1;border:0;background:transparent;padding:13px 0;font:inherit;font-size:16px;color:var(--ink);min-width:0;outline:none}
+.chips{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px;scrollbar-width:none;margin-inline:-16px;padding-inline:16px}
+.chips::-webkit-scrollbar{display:none}
+.chip{flex:none;border:0;border-radius:99px;padding:8px 14px;font:inherit;font-size:14px;font-weight:700;background:var(--surface);color:var(--muted);box-shadow:var(--shadow);cursor:pointer;white-space:nowrap}
+.chip[aria-pressed="true"]{background:var(--ink);color:var(--bg)}
+.chips#catChips .chip[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.chip.warn[aria-pressed="true"]{background:var(--warn);color:var(--surface)}
+
+/* cards */
+.section-h{display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;color:var(--muted);margin-top:4px}
+.section-h .count{font-weight:500}
+.cards{display:flex;flex-direction:column;gap:10px}
+.card{background:var(--surface);border-radius:16px;box-shadow:var(--shadow);padding:12px;display:flex;align-items:center;gap:12px;min-width:0}
+.card.tap{cursor:pointer}
+.av{width:44px;height:44px;border-radius:14px;display:grid;place-items:center;font-weight:900;font-size:18px;flex:none}
+.c1{background:var(--b1s);color:var(--b1)} .c2{background:var(--b2s);color:var(--b2)} .c3{background:var(--b3s);color:var(--b3)} .c4{background:var(--b4s);color:var(--b4)} .c5{background:var(--b5s);color:var(--b5)}
+.body{flex:1;min-width:0;display:flex;flex-direction:column;gap:3px}
+.title{font-weight:700;overflow-wrap:anywhere}
+.meta{display:flex;flex-wrap:wrap;gap:6px;align-items:center;font-size:13px;color:var(--muted)}
+.tag{font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
+.tag.low{background:var(--warn-soft);color:var(--warn)} .tag.out{background:var(--bad-soft);color:var(--bad)} .tag.ok{background:var(--good-soft);color:var(--good)} .tag.cam{background:var(--accent-soft);color:var(--accent)}
+main{padding-bottom:40px}
+.card.sold{opacity:.55}
+.right{display:flex;flex-direction:column;align-items:flex-end;flex:none}
+.qty{font-size:22px;font-weight:900}
+.qty small{font-size:12px;font-weight:500;color:var(--muted);margin-left:2px}
+.empty{text-align:center;color:var(--muted);padding:40px 16px}
+.empty b{display:block;color:var(--ink);font-size:18px;margin-bottom:6px}
+.foot{font-size:12px;color:var(--muted);text-align:center;margin-top:8px}
+.chk{display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+.chk input{width:20px;height:20px;accent-color:var(--accent)}
+</style>
+</head>
+<body>
+<header class="top"><div class="grow"><h1 id="bname">永樂寄售庫存</h1><div class="sub" id="upd">讀取中…</div></div></header>
+<main>
+  <div class="screen">
+    <div class="stats" id="stats" hidden>
+      <div class="stat"><span class="k">在店商品</span><span class="v num" id="sKinds">0</span></div>
+      <div class="stat"><span class="k">總件數</span><span class="v num" id="sQty">0</span></div>
+      <div class="stat money"><span class="k">庫存總售價</span><span class="v num" id="sVal">$0</span></div>
+    </div>
+    <div id="tools" hidden style="display:flex;flex-direction:column;gap:12px">
+      <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋編號或商品名稱" aria-label="搜尋"></label>
+      <div class="chips" id="catChips"></div>
+      <label class="chk"><input type="checkbox" id="showSold">顯示已售完的商品</label>
+    </div>
+    <div class="cards" id="list"><div class="empty">讀取中…</div></div>
+    <p class="foot">這是永樂寄售店提供的庫存頁面，只顯示你的品牌。</p>
+  </div>
+</main>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
+<script src="firebase-config.js"></script>
+<script>
+const $=s=>document.querySelector(s);
+const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
+const money=n=>"$"+Math.round(Number(n||0)).toLocaleString("en-US");
+const fmtN=n=>Number(n||0).toLocaleString("en-US");
+let view=null, cat="";
+function fail(t){ $("#upd").textContent=""; $("#list").innerHTML=`<div class="empty"><b>${esc(t)}</b>請向永樂索取最新的連結。</div>`; }
+function render(){
+  const its=view.items||[]; const inStock=its.filter(i=>Number(i.qty)>0);
+  $("#sKinds").textContent=fmtN(inStock.length); $("#sQty").textContent=fmtN(inStock.reduce((s,i)=>s+Number(i.qty||0),0));
+  $("#sVal").textContent=money(inStock.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0));
+  const cats=[...new Set(its.map(i=>i.category||"").filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant",{numeric:true}));
+  if(cat&&!cats.includes(cat)) cat="";
+  $("#catChips").hidden=!cats.length;
+  $("#catChips").innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!cat}">全部</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${cat===c}">${esc(c)}</button>`)).join("");
+  const q=$("#q").value.trim().toLowerCase(), sold=$("#showSold").checked;
+  const rows=its.filter(i=>(sold||Number(i.qty)>0)&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
+    .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}"><div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span></div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
+    :`<div class="empty"><b>${its.length?"沒有符合的商品":"目前沒有在店的商品"}</b></div>`;
+}
+document.addEventListener("click",e=>{ const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
+$("#q").oninput=()=>view&&render(); $("#showSold").onchange=()=>view&&render();
+(function(){
+  const t=new URLSearchParams(location.search).get("t");
+  if(!t||!/^[a-f0-9]{16,64}$/.test(t)) return fail("連結不完整");
+  if(!(window.FIREBASE_CONFIG&&window.FIREBASE_CONFIG.apiKey)) return fail("頁面還沒設定好");
+  firebase.initializeApp(window.FIREBASE_CONFIG);
+  firebase.firestore().collection("vendorViews").doc(t).onSnapshot(d=>{
+    if(!d.exists) return fail("這個連結已經失效");
+    view=d.data(); document.title=`${view.brand} 寄售庫存`; $("#bname").textContent=`${view.brand}`;
+    $("#upd").textContent="永樂寄售庫存 · 更新於 "+new Date(view.updatedAt||Date.now()).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
+    $("#stats").hidden=false; $("#tools").hidden=false; render();
+  }, ()=>fail("這個連結已經失效"));
+})();
+</script>
+</body>
+</html>
