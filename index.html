@@ -181,6 +181,10 @@ button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);out
 .split b{font-size:19px;color:var(--ink);font-weight:900}
 .photo-pick{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .photo-pick label.btn{flex:0 0 auto;background:var(--accent-soft);color:var(--accent)}
+.lpbox{background:var(--good-soft);color:var(--ink);border-radius:14px;padding:12px 14px;font-size:14px;display:flex;flex-wrap:wrap;gap:4px;align-items:baseline}
+.lpbox b#sTotal{font-size:20px;font-family:var(--f-head);color:var(--good)} .lpbox span{color:var(--muted)}
+.hero .lpline{grid-column:1/-1;font-size:12px;opacity:.9;border-top:1px solid rgba(255,250,241,.35);padding-top:6px;margin-top:2px}
+.tag.lp{background:var(--good-soft);color:var(--good)}
 .catrow{display:flex;gap:8px;align-items:center}
 .catrow .mini{white-space:nowrap;flex:0 0 auto}
 .catrow .n{flex:0 0 auto;font-size:13px;color:var(--muted);min-width:42px;text-align:right}
@@ -337,6 +341,7 @@ let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, openB
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
 function status(it){ const q=Number(it.qty||0), m=Number(it.min||0); if(q<=0) return "out"; if(m>0 && q<=m) return "low"; return ""; }
 function errText(e){ return e&&e.code==="not_granted" ? "你沒有編輯權限，請負責人把你加入。" : (e&&e.message)||String(e); }
+const LINEPAY_FEE = 3; // % added on top of the price when the customer pays with LINE Pay; kept by the shop, not split with the brand
 function splitSale(amount, rate){ const commission=Math.round(amount*rate/100); return {commission, payout:amount-commission}; }
 const brands = () => [...new Set(items.map(i=>i.brand||"").concat(brandDocs.map(b=>b.name||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant"));
 const brandDoc = b => brandDocs.find(x=>x.name===b);
@@ -424,7 +429,7 @@ function renderLog(){
       <span class="ico ${esc(m.type)}">${TICON[m.type]||""}</span>
       <div class="body">
         <span class="title">${esc(m.itemName)}</span>
-        <span class="meta">${TYPE[m.type]||esc(m.type)}${m.void?"（已作廢）":""} · ${fmtHM(m.at)}${who(m.by)?" · "+esc(who(m.by)):""}${m.sku?` · #${esc(m.sku)}`:""}</span>
+        <span class="meta">${TYPE[m.type]||esc(m.type)}${m.void?"（已作廢）":""}${m.pay==="linepay"?` · <span class="tag lp">LINE Pay +${money(m.fee)}</span>`:""} · ${fmtHM(m.at)}${who(m.by)?" · "+esc(who(m.by)):""}${m.sku?` · #${esc(m.sku)}`:""}</span>
         ${m.note?`<span class="meta">${esc(m.note)}</span>`:""}
       </div>
       <div class="right">
@@ -437,10 +442,10 @@ function renderLog(){
 
 function settleRows(mk, all){
   const by={};
-  if(all) brands().forEach(b=>by[b]={brand:b,count:0,amount:0,commission:0,payout:0,sales:[]});
+  if(all) brands().forEach(b=>by[b]={brand:b,count:0,amount:0,commission:0,payout:0,fee:0,sales:[]});
   liveSales().filter(m=>monthKey(m.at)===mk).forEach(m=>{
-    const b=m.brand||"(未填品牌)"; const r=by[b] ||= {brand:b,count:0,amount:0,commission:0,payout:0,sales:[]};
-    r.count+=Number(m.qty||0); r.amount+=Number(m.amount||0); r.commission+=Number(m.commission||0); r.payout+=Number(m.payout||0); r.sales.push(m);
+    const b=m.brand||"(未填品牌)"; const r=by[b] ||= {brand:b,count:0,amount:0,commission:0,payout:0,fee:0,sales:[]};
+    r.count+=Number(m.qty||0); r.amount+=Number(m.amount||0); r.commission+=Number(m.commission||0); r.payout+=Number(m.payout||0); r.fee+=Number(m.fee||0); r.sales.push(m);
   });
   return Object.values(by).sort((a,b)=>a.brand.localeCompare(b.brand,"zh-Hant"));
 }
@@ -449,7 +454,7 @@ function renderSettle(){
   const [y,mo]=curMonth.split("-"); $("#mLabel").textContent=`${y} 年 ${Number(mo)} 月`;
   if(!db) return;
   const rows=settleRows(curMonth,true); const sum=k=>rows.reduce((s,r)=>s+r[k],0);
-  $("#hero").innerHTML=`<div><span>銷售額</span><b class="num">${money(sum("amount"))}</b></div><div><span>我們抽成</span><b class="num">${money(sum("commission"))}</b></div><div><span>付給店家</span><b class="num">${money(sum("payout"))}</b></div>`;
+  $("#hero").innerHTML=`<div><span>銷售額</span><b class="num">${money(sum("amount"))}</b></div><div><span>我們抽成</span><b class="num">${money(sum("commission"))}</b></div><div><span>付給店家</span><b class="num">${money(sum("payout"))}</b></div>${sum("fee")?`<div class="lpline">LINE Pay 手續費另收 ${money(sum("fee"))}（不分給店家）</div>`:""}`;
   if(!rows.length){ $("#settleList").innerHTML='<div class="empty"><b>還沒有品牌</b>新增商品後，每個品牌每月要付多少會列在這裡。</div>'; return; }
   rows.sort((a,b)=>(b.count>0)-(a.count>0)||a.brand.localeCompare(b.brand,"zh-Hant"));
   $("#settleList").innerHTML=rows.map(r=>{
@@ -789,6 +794,13 @@ function sellForm(it){
         <label class="field">數量<input id="sQty" type="number" step="1" min="1" inputmode="numeric" value="1" required></label>
         <label class="field">單價（可改成折扣價）<input id="sPrice" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.price)}" required></label>
       </div>
+      <div class="field">付款方式
+        <div class="seg" role="group" aria-label="付款方式" id="sPayBy">
+          <button type="button" data-pm="cash" aria-pressed="true">現金</button>
+          <button type="button" data-pm="linepay" aria-pressed="false">LINE Pay（+${LINEPAY_FEE}%）</button>
+        </div>
+      </div>
+      <div class="lpbox" id="sLp" hidden>客人要付 <b id="sTotal">–</b><span>（含 LINE Pay ${LINEPAY_FEE}% 手續費 <b id="sFee">–</b>）</span></div>
       <div class="split" aria-live="polite">
         <div>銷售額<b id="sAmt">–</b></div>
         <div>我們 ${fmtN(rate)}%<b id="sCom">–</b></div>
@@ -803,14 +815,17 @@ function sellForm(it){
           <img id="sPrev" alt="照片預覽" hidden>
         </div>
       </div>
-      <label class="field">備註（選填，例如客人、付款方式）<input id="sNote" maxlength="200"></label>
+      <label class="field">備註（選填，例如客人）<input id="sNote" maxlength="200"></label>
       <p class="err" id="sErr" hidden></p>
       <div class="acts"><button class="btn" type="button" id="sCancel">取消</button><button class="btn primary" type="submit" id="sSave">確認售出</button></div>
     </form>`, m=>{
-    let photo=null;
+    let photo=null, payBy="cash";
     const err=t=>{ const p=m.querySelector("#sErr"); p.textContent=t; p.hidden=!t; };
+    m.querySelectorAll("#sPayBy button").forEach(b=>b.onclick=()=>{ payBy=b.dataset.pm; m.querySelectorAll("#sPayBy button").forEach(x=>x.setAttribute("aria-pressed",x===b)); m.querySelector("#sLp").hidden=payBy!=="linepay"; calc(); });
     const calc=()=>{ const amt=Number(m.querySelector("#sQty").value||0)*Number(m.querySelector("#sPrice").value||0); const s=splitSale(amt,rate);
-      m.querySelector("#sAmt").textContent=money(amt); m.querySelector("#sCom").textContent=money(s.commission); m.querySelector("#sPay").textContent=money(s.payout); return {amt,...s}; };
+      m.querySelector("#sAmt").textContent=money(amt); m.querySelector("#sCom").textContent=money(s.commission); m.querySelector("#sPay").textContent=money(s.payout);
+      const fee=payBy==="linepay"?Math.round(amt*LINEPAY_FEE/100):0; m.querySelector("#sFee").textContent=money(fee); m.querySelector("#sTotal").textContent=money(amt+fee);
+      return {amt,...s,fee}; };
     calc(); m.querySelector("#sQty").oninput=calc; m.querySelector("#sPrice").oninput=calc;
     m.querySelector("#sCancel").onclick=closeModal;
     const onPhoto=async e=>{
@@ -832,12 +847,12 @@ function sellForm(it){
         const vb=vn?bumpVariant(fresh,vn,-n):null;
         if(vb&&vb.vqty<0){ btn.disabled=false; return err(`${vn} 只剩 ${fmtN(vb.vqty+n)}，不能賣 ${fmtN(n)}。`); }
         if(n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}，不能賣 ${fmtN(n)}。`); }
-        const {amt,commission,payout}=calc(); const after=vb?vb.vqty:cur-n;
+        const {amt,commission,payout,fee}=calc(); const after=vb?vb.vqty:cur-n;
         let photoId="";
         if(photo){ const p=await db.collection("photos").add({data:photo,itemName:it.name,at:Date.now(),by:myId||""}); photoId=p.id; }
         await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,photoId,after,note:m.querySelector("#sNote").value.trim()});
-        closeModal(); toast(`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
+        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,pay:payBy,fee,charged:amt+fee,photoId,after,note:m.querySelector("#sNote").value.trim()});
+        closeModal(); toast(fee?`已售出，客人付 ${money(amt+fee)}（LINE Pay）`:`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
   });
@@ -1182,8 +1197,10 @@ $("#exportSettleBtn").onclick=()=>{
   const mk=curMonth; const rows=settleRows(mk);
   const a=[["品牌","售出件數","銷售額","我們抽成","付給店家","狀態"].map(cell).join(",")];
   rows.forEach(r=>{ const s=settles[`${mk}_${brandKey(r.brand)}`]; a.push([r.brand,r.count,r.amount,r.commission,r.payout,s&&s.paid?"已付":"未付"].map(cell).join(",")); });
-  a.push(""); a.push(["時間","品牌","商品編號","商品","數量","單價","銷售額","我們抽成","付給店家","操作人","備註"].map(cell).join(","));
-  rows.forEach(r=>r.sales.forEach(m=>a.push([new Date(m.at).toLocaleString("zh-TW"),m.brand,m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,who(m.by),m.note].map(cell).join(","))));
+  const fees=rows.reduce((t,r)=>t+r.sales.reduce((u,m)=>u+Number(m.fee||0),0),0);
+  if(fees) a.push(["LINE Pay 手續費（店內收入，不分給店家）","","","",fees,""].map(cell).join(","));
+  a.push(""); a.push(["時間","品牌","商品編號","商品","數量","單價","銷售額","我們抽成","付給店家","付款方式","LINE Pay手續費","客人實付","操作人","備註"].map(cell).join(","));
+  rows.forEach(r=>r.sales.forEach(m=>a.push([new Date(m.at).toLocaleString("zh-TW"),m.brand,m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.pay==="linepay"?"LINE Pay":"現金",m.fee||0,Number(m.amount||0)+Number(m.fee||0),who(m.by),m.note].map(cell).join(","))));
   saveCSV(`永樂結算_${mk}.csv`, a);
 };
 
