@@ -322,7 +322,7 @@ const catsOf = b => [...new Set(((brandDoc(b)||{}).categories||[]).concat(items.
 const needsPhoto = it => !!it.needsPhoto || brandDocs.some(b=>b.name===it.brand && b.needsPhoto);
 const liveSales = () => moves.filter(m=>m.type==="sale" && !m.void);
 const brandColor = b => { const list=brands(); const i=list.indexOf(b); return "c"+((i<0?[...String(b)].reduce((s,c)=>s+c.charCodeAt(0),0):i)%5+1); };
-const DEFAULT_LOGOS = {"木子花花":"logos/muzi.jpg","世界漂亮在台協會":"logos/sekai.jpg"};
+const DEFAULT_LOGOS = {"木子花花":"logos/muzfafa.jpg","世界漂亮在台協會":"logos/sekai.jpg"};
 const brandImg = (b, cat) => { const d=brandDoc(b)||{}; return (cat&&d.catImages&&d.catImages[cat])||d.logo||DEFAULT_LOGOS[b]||""; };
 const avatar = (b, label, cat) => { const im=brandImg(b,cat); return im ? `<img class="av img" src="${esc(im)}" alt="" aria-hidden="true">` : `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`; };
 
