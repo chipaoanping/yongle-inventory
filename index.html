@@ -346,7 +346,7 @@ const liveSales = () => moves.filter(m=>m.type==="sale" && !m.void);
 const brandColor = b => { const list=brands(); const i=list.indexOf(b); return "c"+((i<0?[...String(b)].reduce((s,c)=>s+c.charCodeAt(0),0):i)%5+1); };
 const DEFAULT_LOGOS = {"木子花花":"logos/muzfafa.jpg","世界漂亮在台協會":"logos/sekai.jpg"};
 const brandImg = (b, cat) => { const d=brandDoc(b)||{}; return (cat&&d.catImages&&d.catImages[cat])||d.logo||DEFAULT_LOGOS[b]||""; };
-const avatar = (b, label, cat) => { const im=brandImg(b,cat); return im ? `<img class="av img" src="${esc(im)}" alt="" aria-hidden="true">` : `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`; };
+const avatar = (b, label, cat, own) => { const im=own||brandImg(b,cat); return im ? `<img class="av img" src="${esc(im)}" alt="" aria-hidden="true">` : `<span class="av ${brandColor(b)}" aria-hidden="true">${esc([...String(label||b||"?").replace(/[（(].*?[)）]/g,"")][0]||"?")}</span>`; };
 
 /* ---------- operator names ---------- */
 async function resolveNames(ids){
@@ -371,7 +371,7 @@ function renderSummary(){
 function itemCard(i, pick){
   const s=status(i);
   return `<div class="card tap" tabindex="0" role="button" data-${pick?"pick":"act"}="${esc(i.id)}">
-    ${avatar(i.brand,i.name,i.category)}
+    ${avatar(i.brand,i.name,i.category,i.image)}
     <div class="body">
       <span class="title">${esc(i.name)}</span>
       <span class="meta">
@@ -483,7 +483,7 @@ function openModal(html, bind, wide){
 }
 
 function actionSheet(it){
-  openModal(`<div style="display:flex;gap:12px;align-items:center">${avatar(it.brand,it.name,it.category)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
+  openModal(`<div style="display:flex;gap:12px;align-items:center">${it.image?`<img class="av img" src="${esc(it.image)}" alt="" style="width:72px;height:72px">`:avatar(it.brand,it.name,it.category)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
     <div class="menu" style="box-shadow:none;background:var(--surface-2)">
       <button type="button" id="aSell" ${Number(it.qty)>0?"":"disabled"}><span class="ico">${TICON.sale}</span><span>售出${needsPhoto(it)?"<small>這個商品售出要拍照</small>":""}</span></button>
       <button type="button" id="aStock"><span class="ico">${TICON.in}</span><span>入庫／退回店家</span></button>
@@ -641,6 +641,16 @@ function itemForm(it){
     <form id="f" style="display:flex;flex-direction:column;gap:10px">
       <label class="field">品牌（寄售店家）<select id="fBrand" required><option value="" disabled ${it.brand?"":"selected"}>請選擇品牌</option>${brands().map(b=>`<option value="${esc(b)}" ${b===it.brand?"selected":""}>${esc(b)}</option>`).join("")}</select></label>
       ${brands().length?"":'<p class="hint">還沒有品牌，請先到「更多 → 寄售品牌與分類」新增品牌。</p>'}
+      <div class="field">商品照片（選填）
+        <div class="photo-pick">
+          <img id="fPrev" alt="商品照片" ${it.image?`src="${esc(it.image)}"`:"hidden"}>
+          <label class="btn" for="fCam">📷 拍照</label>
+          <label class="btn" for="fFile" style="background:var(--surface-2);color:var(--ink)">從相簿選</label>
+          <button class="mini" type="button" id="fImgDel" ${it.image?"":"hidden"}>移除</button>
+          <input id="fCam" type="file" accept="image/*" capture="environment" hidden>
+          <input id="fFile" type="file" accept="image/*" hidden>
+        </div>
+      </div>
       <label class="field">商品名稱<input id="fName" required maxlength="80" value="${esc(it.name)}"></label>
       <div class="grid2">
         <label class="field">分類<select id="fCat"></select></label>
@@ -663,6 +673,11 @@ function itemForm(it){
       </div>
     </form>`, m=>{
     m.querySelector("#fCancel").onclick=closeModal;
+    let image=it.image||"";
+    const onImg=async e=>{ const f=e.target.files[0]; if(!f) return;
+      try{ image=await makeThumb(f,400); const p=m.querySelector("#fPrev"); p.src=image; p.hidden=false; m.querySelector("#fImgDel").hidden=false; }catch(x){ showErr(x); } };
+    m.querySelector("#fCam").onchange=onImg; m.querySelector("#fFile").onchange=onImg;
+    m.querySelector("#fImgDel").onclick=()=>{ image=""; m.querySelector("#fPrev").hidden=true; m.querySelector("#fImgDel").hidden=true; };
     let curCat=it.category||"";
     const fillCats=()=>{ const cs=catsOf(m.querySelector("#fBrand").value); if(curCat&&!cs.includes(curCat)) cs.push(curCat);
       m.querySelector("#fCat").innerHTML=`<option value="">未分類</option>`+cs.map(c=>`<option value="${esc(c)}" ${c===curCat?"selected":""}>${esc(c)}</option>`).join(""); };
@@ -678,7 +693,7 @@ function itemForm(it){
       const v=id=>m.querySelector(id).value.trim();
       const data={ brand:v("#fBrand"), name:v("#fName"), category:v("#fCat"), sku:v("#fSku"), price:Number(v("#fPrice")||0), rate:Number(v("#fRate")||0),
         qty:Number(v("#fQty")||0), unit:v("#fUnit")||"件", min:Number(v("#fMin")||0), needsPhoto:m.querySelector("#fPhoto").checked,
-        note:v("#fNote"), updatedAt:Date.now() };
+        note:v("#fNote"), image, updatedAt:Date.now() };
       if(!data.name||!data.brand) return;
       m.querySelector("#fSave").disabled=true;
       try{
@@ -698,11 +713,11 @@ function itemForm(it){
 
 function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:Date.now()}); }
 
-async function makeThumb(file){
+async function makeThumb(file, S=240){
   const url=URL.createObjectURL(file);
   try{
     const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=()=>rej(new Error("讀不到這張圖片")); i.src=url; });
-    const S=240, w=img.naturalWidth, h=img.naturalHeight, m=Math.min(w,h);
+    const w=img.naturalWidth, h=img.naturalHeight, m=Math.min(w,h);
     const c=document.createElement("canvas"); c.width=S; c.height=S; const x=c.getContext("2d");
     x.fillStyle="#fff"; x.fillRect(0,0,S,S); x.drawImage(img,(w-m)/2,(h-m)/2,m,m,0,0,S,S);
     return c.toDataURL("image/jpeg",0.82);
