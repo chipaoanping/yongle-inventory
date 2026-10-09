@@ -174,6 +174,11 @@ button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);out
 .split b{font-size:19px;color:var(--ink);font-weight:900}
 .photo-pick{display:flex;gap:12px;align-items:center;flex-wrap:wrap}
 .photo-pick label.btn{flex:0 0 auto;background:var(--accent-soft);color:var(--accent)}
+.catrow{display:flex;gap:8px;align-items:center}
+.catrow .mini{white-space:nowrap;flex:0 0 auto}
+.catrow .n{flex:0 0 auto;font-size:13px;color:var(--muted);min-width:42px;text-align:right}
+.catrow.del input{text-decoration:line-through;opacity:.45}
+.brandlist .card{flex:1 1 100%}
 .photo-pick img{width:84px;height:84px;object-fit:cover;border-radius:12px}
 .bigphoto{width:100%;border-radius:14px}
 .seg{display:flex;background:var(--surface-2);border-radius:14px;padding:4px;gap:4px}
@@ -257,7 +262,7 @@ td.n,th.n{text-align:right}
       <button type="button" id="migrateBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><span>搬入舊資料<small>匯入從 Claude 頁面匯出的 JSON（只需一次）</small></span></button>
       <button type="button" id="logoutBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></span><span>登出<small id="meLine"></small></span></button>
     </div>
-    <div class="section-h">寄售品牌</div>
+    <div class="section-h">寄售品牌與分類（點一下可編輯）</div>
     <div class="brandlist" id="brandList"></div>
   </section>
 </main>
@@ -307,6 +312,8 @@ function status(it){ const q=Number(it.qty||0), m=Number(it.min||0); if(q<=0) re
 function errText(e){ return e&&e.code==="not_granted" ? "你沒有編輯權限，請負責人把你加入。" : (e&&e.message)||String(e); }
 function splitSale(amount, rate){ const commission=Math.round(amount*rate/100); return {commission, payout:amount-commission}; }
 const brands = () => [...new Set(items.map(i=>i.brand||"").concat(brandDocs.map(b=>b.name||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant"));
+const brandDoc = b => brandDocs.find(x=>x.name===b);
+const catsOf = b => [...new Set(((brandDoc(b)||{}).categories||[]).concat(items.filter(i=>i.brand===b).map(i=>i.category||"")).filter(Boolean))].sort((x,y)=>x.localeCompare(y,"zh-Hant",{numeric:true}));
 const needsPhoto = it => !!it.needsPhoto || brandDocs.some(b=>b.name===it.brand && b.needsPhoto);
 const liveSales = () => moves.filter(m=>m.type==="sale" && !m.void);
 const brandColor = b => { const list=brands(); const i=list.indexOf(b); return "c"+((i<0?[...String(b)].reduce((s,c)=>s+c.charCodeAt(0),0):i)%5+1); };
@@ -358,7 +365,7 @@ function renderItems(){
   if(brandFilter && !bl.includes(brandFilter)) brandFilter="";
   $("#brandChips").innerHTML=[`<button class="chip" type="button" data-bf="" aria-pressed="${!brandFilter}">全部 ${items.length}</button>`]
     .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${esc(b)} ${items.filter(i=>i.brand===b).length}</button>`)).join("");
-  const cats=[...new Set(items.filter(i=>i.brand===brandFilter).map(i=>i.category||"").filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant",{numeric:true}));
+  const cats=brandFilter?catsOf(brandFilter):[];
   if(catFilter && !cats.includes(catFilter)) catFilter="";
   const cc=$("#catChips"); cc.hidden=!brandFilter||!cats.length;
   cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${esc(c)} ${items.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
@@ -431,7 +438,10 @@ function renderSettle(){
 }
 
 function renderMore(){
-  $("#brandList").innerHTML=brands().map(b=>`<span class="tag" style="font-size:14px;padding:6px 12px;display:inline-flex;align-items:center;gap:8px">${esc(b)}${brandDocs.some(x=>x.name===b&&x.needsPhoto)?' · 售出需拍照':""}</span>`).join("")||'<span class="hint">尚無品牌</span>';
+  $("#brandList").innerHTML=brands().map(b=>{ const d=brandDoc(b)||{}; const cs=catsOf(b);
+    return `<div class="card tap" tabindex="0" role="button" data-bed="${esc(b)}">${avatar(b,b)}<div class="body"><span class="title">${esc(b)}</span><span class="meta">${items.filter(i=>i.brand===b).length} 件商品${cs.length?` · ${cs.length} 個分類`:""}${d.needsPhoto?' · <span class="tag cam">售出需拍照</span>':""}</span></div><span class="mini" aria-hidden="true">編輯</span></div>`; }).join("")
+    +`<button class="btn" type="button" id="addBrandBtn" style="flex:1 1 100%">＋ 新增品牌</button>`;
+  $("#addBrandBtn").onclick=()=>{ if(db) brandForm(null); };
   const [y,mo]=curMonth.split("-"); $("#exportSettleSub").textContent=`${y} 年 ${Number(mo)} 月，給店家對帳用`;
 }
 
@@ -455,6 +465,69 @@ function actionSheet(it){
     m.querySelector("#aStock").onclick=()=>stockForm(it);
     m.querySelector("#aEdit").onclick=()=>itemForm(it);
     m.querySelector("#aClose").onclick=closeModal;
+  });
+}
+
+/* ---------- brands & categories ---------- */
+async function commitOps(ops){
+  for(let i=0;i<ops.length;i+=400){ const b=db.batch(); ops.slice(i,i+400).forEach(o=>o.del?b.delete(o.ref):b.set(o.ref,o.data,{merge:true})); await b.commit(); }
+}
+function brandForm(name){
+  const isNew=!name; const d=(name&&brandDoc(name))||{}; const its=name?items.filter(i=>i.brand===name):[];
+  const row=(c,n)=>`<div class="catrow" data-old="${esc(c)}"><input maxlength="30" value="${esc(c)}" placeholder="分類名稱，例如 A 項鍊" aria-label="分類名稱"><span class="n">${n} 件</span><button class="mini" type="button" data-rm>刪除</button></div>`;
+  openModal(`
+    <h2>${isNew?"新增品牌":"編輯品牌"}</h2>
+    <form id="b" style="display:flex;flex-direction:column;gap:10px">
+      <label class="field">品牌名稱<input id="bName" required maxlength="40" value="${esc(name||"")}"></label>
+      <label class="chk"><input type="checkbox" id="bSku" ${d.hasSku?"checked":""}>商品有編號</label>
+      <label class="chk"><input type="checkbox" id="bPhoto" ${d.needsPhoto?"checked":""}>這個品牌每件售出都要拍照</label>
+      <div class="field">分類<div id="bCats" style="display:flex;flex-direction:column;gap:8px">${(name?catsOf(name):[]).map(c=>row(c,its.filter(i=>i.category===c).length)).join("")}</div>
+        <button class="btn" type="button" id="bAddCat">＋ 新增分類</button></div>
+      <p class="hint">分類改名會一起改掉商品上的分類；刪除分類時，商品會保留，只是變成「未分類」。</p>
+      <p class="err" id="bErr" hidden></p>
+      <div class="acts">
+        ${isNew?"":'<button class="btn danger" type="button" id="bDel">刪除品牌</button><span class="spacer"></span>'}
+        <button class="btn" type="button" id="bCancel">取消</button>
+        <button class="btn primary" type="submit" id="bSave">儲存</button>
+      </div>
+    </form>`, m=>{
+    const err=t=>{ const p=m.querySelector("#bErr"); p.textContent=t; p.hidden=!t; };
+    m.querySelector("#bCancel").onclick=closeModal;
+    m.querySelector("#bAddCat").onclick=()=>{ m.querySelector("#bCats").insertAdjacentHTML("beforeend",row("",0)); const r=m.querySelector("#bCats").lastElementChild; r.dataset.old=""; r.querySelector(".n").textContent=""; r.querySelector("input").focus(); };
+    m.querySelector("#bCats").addEventListener("click",e=>{ const b=e.target.closest("[data-rm]"); if(!b) return; const r=b.closest(".catrow");
+      if(!r.dataset.old){ r.remove(); return; }
+      const on=!r.classList.contains("del"); r.classList.toggle("del",on); b.textContent=on?"復原":"刪除"; r.querySelector("input").disabled=on; });
+    const del=m.querySelector("#bDel");
+    if(del) del.onclick=async()=>{
+      if(its.length) return err(`這個品牌還有 ${its.length} 件商品，請先把商品刪除或改到別的品牌。過去的售出紀錄會保留。`);
+      if(del.dataset.armed!=="1"){ del.dataset.armed="1"; del.textContent="再按一次確認刪除"; return; }
+      try{ if(d.id) await db.collection("brands").doc(d.id).delete(); closeModal(); toast("已刪除品牌"); }catch(e){ err("刪除失敗："+errText(e)); }
+    };
+    m.querySelector("#b").onsubmit=async ev=>{
+      ev.preventDefault(); err("");
+      const nn=m.querySelector("#bName").value.trim(); if(!nn) return;
+      if(nn!==name && brands().includes(nn)) return err("已經有這個品牌名稱了。");
+      const rows=[...m.querySelectorAll("#bCats .catrow")].map(r=>({old:r.dataset.old, val:r.querySelector("input").value.trim(), del:r.classList.contains("del")}));
+      const cats=[...new Set(rows.filter(r=>!r.del&&r.val).map(r=>r.val))];
+      const catMap={}; rows.forEach(r=>{ if(r.old) catMap[r.old]= r.del ? "" : (r.val||r.old); });
+      const btn=m.querySelector("#bSave"); btn.disabled=true;
+      try{
+        const ops=[]; const renamed=!isNew&&nn!==name;
+        its.forEach(i=>{ const patch={}; if(renamed) patch.brand=nn;
+          if(i.category && (i.category in catMap) && catMap[i.category]!==i.category) patch.category=catMap[i.category];
+          if(Object.keys(patch).length) ops.push({ref:db.collection("items").doc(i.id),data:{...patch,updatedAt:Date.now()}}); });
+        if(renamed){
+          const ms=await db.collection("moves").where("brand","==",name).get();
+          ms.docs.forEach(x=>ops.push({ref:x.ref,data:{brand:nn}}));
+          Object.entries(settles).forEach(([id,v])=>{ if(v.brand===name){ ops.push({ref:db.collection("settlements").doc(`${v.month}_${brandKey(nn)}`),data:{...v,brand:nn}}); ops.push({ref:db.collection("settlements").doc(id),del:true}); } });
+        }
+        const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
+        ops.push({ref:bref,data:{name:nn,hasSku:m.querySelector("#bSku").checked,needsPhoto:m.querySelector("#bPhoto").checked,categories:cats}});
+        await commitOps(ops);
+        if(renamed && brandFilter===name) brandFilter=nn;
+        closeModal(); toast(isNew?"已新增品牌":"已儲存品牌與分類");
+      }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
+    };
   });
 }
 
@@ -485,7 +558,7 @@ function itemForm(it){
         <label class="field">分類（選填）<input id="fCat" maxlength="30" list="catList" value="${esc(it.category||"")}"></label>
         <label class="field">商品編號（選填）<input id="fSku" maxlength="40" value="${esc(it.sku||"")}"></label>
       </div>
-      <datalist id="catList">${[...new Set(items.map(i=>i.category).filter(Boolean))].map(c=>`<option value="${esc(c)}">`).join("")}</datalist>
+      <datalist id="catList"></datalist>
       <div class="grid2">
         <label class="field">售價（元）<input id="fPrice" type="number" step="1" min="0" inputmode="numeric" required value="${esc(it.price)}"></label>
         <label class="field">我們抽成 %<input id="fRate" type="number" step="any" min="0" max="100" value="${esc(it.rate??DEFAULT_RATE)}"></label>
@@ -503,6 +576,8 @@ function itemForm(it){
       </div>
     </form>`, m=>{
     m.querySelector("#fCancel").onclick=closeModal;
+    const fillCats=()=>{ m.querySelector("#catList").innerHTML=catsOf(m.querySelector("#fBrand").value.trim()).map(c=>`<option value="${esc(c)}">`).join(""); };
+    fillCats(); m.querySelector("#fBrand").oninput=fillCats;
     const showErr=e=>{ const p=m.querySelector("#fErr"); p.textContent="儲存失敗："+errText(e); p.hidden=false; };
     const del=m.querySelector("#fDel");
     if(del) del.onclick=async()=>{
@@ -568,8 +643,10 @@ function sellForm(it){
       </div>
       <div class="field">照片${needsPhoto(it)?"（這個商品必須拍照）":"（選填）"}
         <div class="photo-pick">
-          <label class="btn" for="sFile">拍照／選照片</label>
-          <input id="sFile" type="file" accept="image/*" capture="environment" hidden>
+          <label class="btn" for="sCam">📷 拍照</label>
+          <label class="btn" for="sFile" style="background:var(--surface-2);color:var(--ink)">從相簿選</label>
+          <input id="sCam" type="file" accept="image/*" capture="environment" hidden>
+          <input id="sFile" type="file" accept="image/*" hidden>
           <img id="sPrev" alt="照片預覽" hidden>
         </div>
       </div>
@@ -583,10 +660,11 @@ function sellForm(it){
       m.querySelector("#sAmt").textContent=money(amt); m.querySelector("#sCom").textContent=money(s.commission); m.querySelector("#sPay").textContent=money(s.payout); return {amt,...s}; };
     calc(); m.querySelector("#sQty").oninput=calc; m.querySelector("#sPrice").oninput=calc;
     m.querySelector("#sCancel").onclick=closeModal;
-    m.querySelector("#sFile").onchange=async e=>{
+    const onPhoto=async e=>{
       const f=e.target.files[0]; if(!f) return; err("");
       try{ photo=await compressPhoto(f); const p=m.querySelector("#sPrev"); p.src=photo; p.hidden=false; }catch(x){ err(x.message); }
     };
+    m.querySelector("#sCam").onchange=onPhoto; m.querySelector("#sFile").onchange=onPhoto;
     m.querySelector("#s").onsubmit=async ev=>{
       ev.preventDefault();
       const n=Number(m.querySelector("#sQty").value);
@@ -735,6 +813,7 @@ document.addEventListener("click",e=>{
   else if(el=g("data-pay")){ setPaid(el.dataset.pay,true); }
   else if(el=g("data-unpay")){ setPaid(el.dataset.unpay,false); }
   else if(el=g("data-exb")){ exportBrand(el.dataset.exb); }
+  else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
   else if(el=g("data-act")){ const it=items.find(i=>i.id===el.dataset.act); it&&actionSheet(it); }
   else if(el=g("data-brand")){ openBrand=openBrand===el.dataset.brand?null:el.dataset.brand; renderSettle(); }
   else if(el=g("data-bf")){ brandFilter=el.dataset.bf; catFilter=""; renderItems(); }
@@ -861,7 +940,7 @@ function subscribe(){
   unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderItems(); renderMore(); },
     e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
   unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
-  unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>d.data()||{}); renderItems(); renderMore(); }, ()=>{}));
+  unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); }, ()=>{}));
   unsubs.push(db.collection("settlements").onSnapshot(s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));
   if(isOwner()) unsubs.push(db.collection("requests").onSnapshot(s=>{ requestDocs=s.docs.map(d=>d.data()); renderStaff(); }, ()=>{}));
