@@ -185,6 +185,15 @@ button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);out
 .lpbox b#sTotal{font-size:20px;font-family:var(--f-head);color:var(--good)} .lpbox span{color:var(--muted)}
 .hero .lpline{grid-column:1/-1;font-size:12px;opacity:.9;border-top:1px solid rgba(255,250,241,.35);padding-top:6px;margin-top:2px}
 .tag.lp{background:var(--good-soft);color:var(--good)}
+.strow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
+.strow:last-child{border-bottom:0}
+.strow .body{gap:1px}
+.strow .sys{font-size:12px;color:var(--muted)}
+.strow input{width:76px;flex:0 0 76px;text-align:center;font-weight:700;padding:9px 6px}
+.strow .d{flex:0 0 44px;text-align:right;font-weight:900;font-size:14px}
+.strow .d.plus{color:var(--good)} .strow .d.minus{color:var(--bad)}
+.strow.changed{background:linear-gradient(90deg,var(--accent-soft),transparent 70%);margin:0 -8px;padding-inline:8px;border-radius:10px}
+.stlist{max-height:56vh;overflow:auto;margin:0 -4px;padding:0 4px}
 .catrow{display:flex;gap:8px;align-items:center}
 .catrow .mini{white-space:nowrap;flex:0 0 auto}
 .catrow .n{flex:0 0 auto;font-size:13px;color:var(--muted);min-width:42px;text-align:right}
@@ -277,6 +286,7 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 
   <section class="screen" id="p-more" hidden>
     <div class="menu">
+      <button type="button" id="countBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M9 4h6v3H9z"/><path d="M7 5H5v16h14V5h-2"/><path d="m9 14 2 2 4-4"/></svg></span><span>盤點<small>清點實際數量，一次更新庫存</small></span></button>
       <button type="button" id="addBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg></span><span>新增商品<small>一筆一筆加入寄售商品</small></span></button>
       <button type="button" id="importBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 3v12m0 0-4-4m4 4 4-4M5 21h14"/></svg></span><span>匯入 CSV<small>從 Google 試算表下載 CSV 再匯入</small></span></button>
       <button type="button" id="exportItemsBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M12 15V3m0 0-4 4m4-4 4 4M5 21h14"/></svg></span><span>匯出商品清單<small>CSV，可用 Excel 開</small></span></button>
@@ -987,6 +997,90 @@ async function importCSV(file){
     };
   }, true);
 }
+/* ---------- stocktake (盤點): count real quantities, review the differences, apply them as adjustments ---------- */
+const stKey = b => "yongle-stocktake-"+(b||"all");
+const stLoad = b => { try{ return JSON.parse(localStorage.getItem(stKey(b))||"null"); }catch(e){ return null; } };
+const stSave = (b,d) => { try{ localStorage.setItem(stKey(b),JSON.stringify(d)); }catch(e){} };
+const stClear = b => { try{ localStorage.removeItem(stKey(b)); }catch(e){} };
+async function stocktakeStart(){
+  let hist=[]; try{ const q=await db.collection("stocktakes").orderBy("at","desc").limit(10).get(); hist=q.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
+  const bl=brands();
+  openModal(`<h2>盤點</h2>
+    <p class="hint">選要盤點的品牌，逐一填實際數量。中途離開也會保留進度，按「完成盤點」前庫存都不會改。</p>
+    <label class="field">盤點範圍<select id="stB"><option value="">全部品牌</option>${bl.map(b=>`<option value="${esc(b)}" ${b===brandFilter?"selected":""}>${esc(b)}${stLoad(b)?"（有未完成的盤點）":""}</option>`).join("")}</select></label>
+    ${stLoad("")?'<p class="hint">「全部品牌」有未完成的盤點。</p>':""}
+    <div class="acts"><button class="btn" type="button" id="stNo">關閉</button><button class="btn primary" type="button" id="stGo">開始盤點</button></div>
+    ${hist.length?`<div class="section-h">最近的盤點</div><div class="cards">${hist.map(h=>`<div class="card"><div class="body"><span class="title">${esc(h.brand||"全部品牌")}</span><span class="meta">${fmtT(h.at)} · ${esc(who(h.by)||h.byName||"")} · 共 ${fmtN(h.counted)} 項，${h.diffCount?`<span class="tag low">${fmtN(h.diffCount)} 項有差異</span>`:'<span class="tag ok">全部相符</span>'}</span></div>${dl?`<button class="mini" type="button" data-stx="${esc(h.id)}">匯出</button>`:""}</div>`).join("")}</div>`:""}`, m=>{
+    m.querySelector("#stNo").onclick=closeModal;
+    m.querySelector("#stGo").onclick=()=>stocktakeSheet(m.querySelector("#stB").value);
+    m.querySelectorAll("[data-stx]").forEach(b=>b.onclick=()=>{ const h=hist.find(x=>x.id===b.dataset.stx); if(!h) return;
+      const a=[[`${h.brand||"全部品牌"} 盤點 ${new Date(h.at).toLocaleString("zh-TW")}`].map(cell).join(","),"",["品牌","商品編號","商品","規格","系統數量","實際數量","差異"].map(cell).join(",")];
+      (h.rows||[]).forEach(r=>a.push([r.brand,r.sku,r.name,r.variant,r.before,r.counted,r.diff].map(cell).join(",")));
+      saveCSV(`盤點_${h.brand||"全部"}_${new Date(h.at).toISOString().slice(0,10)}.csv`, a); });
+  });
+}
+function stocktakeLines(brand){
+  // one line per item, or per variant when the item has 規格
+  const its=items.filter(i=>!brand||i.brand===brand).sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+  const out=[]; its.forEach(i=>{ if(hasVar(i)) i.variants.forEach(v=>out.push({key:i.id+"|"+v.name,it:i,variant:v.name,sys:Number(v.qty||0)})); else out.push({key:i.id,it:i,variant:"",sys:Number(i.qty||0)}); });
+  return out;
+}
+function stocktakeSheet(brand){
+  const lines=stocktakeLines(brand); const draft=stLoad(brand)||{counts:{},started:Date.now()};
+  const row=l=>{ const c=draft.counts[l.key]; return `<div class="strow" data-k="${esc(l.key)}">${avatar(l.it.brand,l.it.name,l.it.category,l.it.image)}<div class="body"><span class="title">${esc(l.it.name)}${l.variant?`（${esc(l.variant)}）`:""}</span><span class="sys">${l.it.sku?"#"+esc(l.it.sku)+" · ":""}${brand?"":esc(l.it.brand)+" · "}系統 ${fmtN(l.sys)}</span></div><input type="number" min="0" step="1" inputmode="numeric" aria-label="實際數量" placeholder="${fmtN(l.sys)}" value="${c==null?"":esc(c)}"><span class="d"></span></div>`; };
+  openModal(`<h2>盤點：${esc(brand||"全部品牌")}</h2>
+    <p class="hint">數量跟系統一樣可以留空；不一樣才填實際數量。</p>
+    <label class="search" style="box-shadow:none;background:var(--surface-2)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="stQ" type="search" placeholder="搜尋編號或名稱" aria-label="搜尋"></label>
+    <div class="stlist" id="stList">${lines.length?lines.map(row).join(""):'<p class="hint" style="text-align:center;padding:20px">這個範圍沒有商品</p>'}</div>
+    <p class="hint" id="stSum"></p>
+    <div class="acts"><button class="btn" type="button" id="stLater">先存著，稍後繼續</button><button class="btn primary" type="button" id="stDone">完成盤點</button></div>`, m=>{
+    const list=m.querySelector("#stList");
+    const paint=()=>{ let n=0, changed=0;
+      list.querySelectorAll(".strow").forEach(r=>{ const l=lines.find(x=>x.key===r.dataset.k); const v=r.querySelector("input").value; const d=v===""?0:Number(v)-l.sys;
+        if(v!=="") n++; if(d) changed++;
+        const ds=r.querySelector(".d"); ds.textContent=d?(d>0?"+":"")+fmtN(d):""; ds.className="d"+(d>0?" plus":d<0?" minus":""); r.classList.toggle("changed",!!d); });
+      m.querySelector("#stSum").textContent=`共 ${fmtN(lines.length)} 項，已填 ${fmtN(n)} 項，${changed?`${fmtN(changed)} 項跟系統不同`:"目前都相符"}`; };
+    paint();
+    list.addEventListener("input",e=>{ const r=e.target.closest(".strow"); if(!r) return; const v=e.target.value; if(v==="") delete draft.counts[r.dataset.k]; else draft.counts[r.dataset.k]=Math.max(0,Math.floor(Number(v)||0)); stSave(brand,draft); paint(); });
+    m.querySelector("#stQ").oninput=e=>{ const q=e.target.value.trim().toLowerCase(); list.querySelectorAll(".strow").forEach(r=>{ const l=lines.find(x=>x.key===r.dataset.k); r.hidden=!!q&&![l.it.name,l.it.sku,l.variant].join(" ").toLowerCase().includes(q); }); };
+    m.querySelector("#stLater").onclick=()=>{ stSave(brand,draft); closeModal(); toast("盤點進度已保存"); };
+    m.querySelector("#stDone").onclick=()=>stocktakeReview(brand, draft);
+  });
+}
+function stocktakeReview(brand, draft){
+  const lines=stocktakeLines(brand);
+  const diffs=lines.map(l=>({...l,counted:draft.counts[l.key]==null?l.sys:draft.counts[l.key]})).filter(l=>l.counted!==l.sys);
+  openModal(`<h2>確認盤點結果</h2>
+    <p>${diffs.length?`有 <b>${fmtN(diffs.length)}</b> 項跟系統不同，確認後會把庫存改成實際數量：`:"全部跟系統相符，不需要調整庫存。"}</p>
+    ${diffs.length?`<div class="stlist">${diffs.map(l=>{ const d=l.counted-l.sys; return `<div class="strow"><div class="body"><span class="title">${esc(l.it.name)}${l.variant?`（${esc(l.variant)}）`:""}</span><span class="sys">系統 ${fmtN(l.sys)} → 實際 ${fmtN(l.counted)}</span></div><span class="d ${d>0?"plus":"minus"}">${d>0?"+":""}${fmtN(d)}</span></div>`; }).join("")}</div>`:""}
+    <label class="field">備註（選填）<input id="stNote" maxlength="200" placeholder="例如：月底盤點"></label>
+    <p class="err" id="stErr" hidden></p>
+    <div class="acts"><button class="btn" type="button" id="stBack">回去修改</button><button class="btn primary" type="button" id="stApply">確認，完成盤點</button></div>`, m=>{
+    m.querySelector("#stBack").onclick=()=>stocktakeSheet(brand);
+    m.querySelector("#stApply").onclick=async()=>{
+      const btn=m.querySelector("#stApply"); btn.disabled=true; const note=m.querySelector("#stNote").value.trim();
+      try{
+        const at=Date.now(); const label="盤點"+(note?"："+note:"");
+        const byItem={}; diffs.forEach(l=>{ (byItem[l.it.id] ||= []).push(l); });
+        const ops=[]; const rows=[];
+        for(const [id,ls] of Object.entries(byItem)){
+          const fresh=(await db.collection("items").doc(id).get()).data(); if(!fresh) continue;
+          let patch;
+          if(hasVar(fresh)){ const vs=fresh.variants.map(v=>({...v})); ls.forEach(l=>{ const x=vs.find(v=>v.name===l.variant); if(x) x.qty=l.counted; }); patch={variants:vs,qty:varSum(vs)}; }
+          else patch={qty:ls[0].counted};
+          ops.push({ref:db.collection("items").doc(id),data:{...patch,updatedAt:at}});
+          ls.forEach(l=>{ const before=l.variant?Number(((fresh.variants||[]).find(v=>v.name===l.variant)||{}).qty||0):Number(fresh.qty||0);
+            const d=l.counted-before; if(!d) return;
+            ops.push({ref:db.collection("moves").doc(),data:{itemId:id,itemName:varLabel(fresh,l.variant),variant:l.variant,sku:fresh.sku||"",brand:fresh.brand||"",type:"adjust",qty:d,after:l.counted,note:label,by:myId||"",at}}); });
+        }
+        lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key]; rows.push({brand:l.it.brand||"",sku:l.it.sku||"",name:l.it.name,variant:l.variant,before:l.sys,counted:c,diff:c-l.sys}); });
+        ops.push({ref:db.collection("stocktakes").doc(),data:{brand:brand||"",at,by:myId||"",byName:(meStaff&&meStaff.name)||"",note,counted:lines.length,diffCount:diffs.length,rows}});
+        await commitOps(ops); stClear(brand); closeModal();
+        toast(diffs.length?`盤點完成，調整了 ${diffs.length} 項`:"盤點完成，全部相符");
+      }catch(e){ btn.disabled=false; const p=m.querySelector("#stErr"); p.textContent="儲存失敗："+errText(e); p.hidden=false; }
+    };
+  });
+}
 const cell=v=>`"${String(v??"").replace(/"/g,'""')}"`;
 async function saveCSV(name, lines){
   try{ await dl.save({filename:name, data:new Blob(["﻿"+lines.join("\r\n")],{type:"text/csv"})}); }catch(e){ toast("沒有匯出"); }
@@ -1043,6 +1137,7 @@ function shiftMonth(n){ const [y,m]=curMonth.split("-").map(Number); const d=new
 $("#mPrev").onclick=()=>shiftMonth(-1); $("#mNext").onclick=()=>shiftMonth(1);
 $("#fab").onclick=quickSell;
 $("#addBtn").onclick=()=>{ if(db) itemForm(null); };
+$("#countBtn").onclick=()=>{ if(db) stocktakeStart(); };
 $("#importBtn").onclick=()=>{ if(db) $("#importFile").click(); };
 $("#importFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importCSV(f); };
 $("#q").oninput=renderItems; $("#lq").oninput=renderLog;
