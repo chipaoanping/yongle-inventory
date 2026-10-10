@@ -794,12 +794,7 @@ function sellForm(it){
         <label class="field">數量<input id="sQty" type="number" step="1" min="1" inputmode="numeric" value="1" required></label>
         <label class="field">單價（可改成折扣價）<input id="sPrice" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.price)}" required></label>
       </div>
-      <div class="field">付款方式
-        <div class="seg" role="group" aria-label="付款方式" id="sPayBy">
-          <button type="button" data-pm="cash" aria-pressed="true">現金</button>
-          <button type="button" data-pm="linepay" aria-pressed="false">LINE Pay（+${LINEPAY_FEE}%）</button>
-        </div>
-      </div>
+      <label class="chk"><input type="checkbox" id="sLine">用 LINE Pay 結帳（多收 ${LINEPAY_FEE}%）</label>
       <div class="lpbox" id="sLp" hidden>客人要付 <b id="sTotal">–</b><span>（含 LINE Pay ${LINEPAY_FEE}% 手續費 <b id="sFee">–</b>）</span></div>
       <div class="split" aria-live="polite">
         <div>銷售額<b id="sAmt">–</b></div>
@@ -821,7 +816,7 @@ function sellForm(it){
     </form>`, m=>{
     let photo=null, payBy="cash";
     const err=t=>{ const p=m.querySelector("#sErr"); p.textContent=t; p.hidden=!t; };
-    m.querySelectorAll("#sPayBy button").forEach(b=>b.onclick=()=>{ payBy=b.dataset.pm; m.querySelectorAll("#sPayBy button").forEach(x=>x.setAttribute("aria-pressed",x===b)); m.querySelector("#sLp").hidden=payBy!=="linepay"; calc(); });
+    m.querySelector("#sLine").onchange=e=>{ payBy=e.target.checked?"linepay":"cash"; m.querySelector("#sLp").hidden=payBy!=="linepay"; calc(); };
     const calc=()=>{ const amt=Number(m.querySelector("#sQty").value||0)*Number(m.querySelector("#sPrice").value||0); const s=splitSale(amt,rate);
       m.querySelector("#sAmt").textContent=money(amt); m.querySelector("#sCom").textContent=money(s.commission); m.querySelector("#sPay").textContent=money(s.payout);
       const fee=payBy==="linepay"?Math.round(amt*LINEPAY_FEE/100):0; m.querySelector("#sFee").textContent=money(fee); m.querySelector("#sTotal").textContent=money(amt+fee);
@@ -1200,7 +1195,7 @@ $("#exportSettleBtn").onclick=()=>{
   const fees=rows.reduce((t,r)=>t+r.sales.reduce((u,m)=>u+Number(m.fee||0),0),0);
   if(fees) a.push(["LINE Pay 手續費（店內收入，不分給店家）","","","",fees,""].map(cell).join(","));
   a.push(""); a.push(["時間","品牌","商品編號","商品","數量","單價","銷售額","我們抽成","付給店家","付款方式","LINE Pay手續費","客人實付","操作人","備註"].map(cell).join(","));
-  rows.forEach(r=>r.sales.forEach(m=>a.push([new Date(m.at).toLocaleString("zh-TW"),m.brand,m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.pay==="linepay"?"LINE Pay":"現金",m.fee||0,Number(m.amount||0)+Number(m.fee||0),who(m.by),m.note].map(cell).join(","))));
+  rows.forEach(r=>r.sales.forEach(m=>a.push([new Date(m.at).toLocaleString("zh-TW"),m.brand,m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.pay==="linepay"?"LINE Pay":"",m.fee||0,Number(m.amount||0)+Number(m.fee||0),who(m.by),m.note].map(cell).join(","))));
   saveCSV(`永樂結算_${mk}.csv`, a);
 };
 
