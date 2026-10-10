@@ -1108,7 +1108,7 @@ async function waitingScreen(u){
     };
     return;
   }
-  gate(`<div class="gatebox"><h1>等待負責人核准</h1>
+  gate(`<div class="gatebox"><h1>審核中</h1>
     <p>你的帳號 ${esc(u.email)} 已經註冊。請負責人打開 App，到「更多 → 店員」按「核准」。</p>
     <label class="field">你的名字（負責人核准時會看到）<input id="rqN" maxlength="20" placeholder="例如：小美"></label>
     <button class="btn primary" type="button" id="rqGo">送出申請</button>
@@ -1118,7 +1118,7 @@ async function waitingScreen(u){
   $("#lo").onclick=()=>auth.signOut();
   $("#rqCheck").onclick=()=>start(u);
   $("#rqGo").onclick=async()=>{
-    try{ await db.collection("requests").doc(em).set({email:em,name:$("#rqN").value.trim(),uid:u.uid,at:Date.now()}); $("#rqMsg").textContent="已送出，請等負責人核准。"; }
+    try{ await db.collection("requests").doc(em).set({email:em,name:$("#rqN").value.trim(),uid:u.uid,at:Date.now()}); $("#rqMsg").textContent="已送出，審核中。"; }
     catch(x){ $("#rqMsg").textContent="送出失敗："+x.message; }
   };
 }
