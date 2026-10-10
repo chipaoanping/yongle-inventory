@@ -499,7 +499,7 @@ function openModal(html, bind, wide){
 }
 
 function actionSheet(it){
-  openModal(`<div style="display:flex;gap:12px;align-items:center">${it.image?`<img class="av img" src="${esc(it.image)}" alt="" style="width:72px;height:72px">`:avatar(it.brand,it.name,it.category)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span></div></div>
+  openModal(`<div style="display:flex;gap:12px;align-items:center">${it.image?`<img class="av img" src="${esc(it.image)}" alt="" style="width:72px;height:72px">`:avatar(it.brand,it.name,it.category)}<div class="body"><h2>${esc(it.name)}</h2><span class="meta">${esc(it.brand||"")}${it.sku?" · #"+esc(it.sku):""} · ${money(it.price)} · 庫存 ${fmtN(it.qty)} ${esc(it.unit||"件")}</span>${it.lastCount?`<span class="meta">上次盤點 ${fmtT(it.lastCount.at)}，實際 ${fmtN(it.lastCount.qty)} ${esc(it.unit||"件")}</span>`:""}</div></div>
     <div class="menu" style="box-shadow:none;background:var(--surface-2)">
       <button type="button" id="aSell" ${Number(it.qty)>0?"":"disabled"}><span class="ico">${TICON.sale}</span><span>售出${needsPhoto(it)?"<small>這個商品售出要拍照</small>":""}</span></button>
       <button type="button" id="aStock"><span class="ico">${TICON.in}</span><span>入庫／退回店家</span></button>
@@ -1003,20 +1003,34 @@ const stLoad = b => { try{ return JSON.parse(localStorage.getItem(stKey(b))||"nu
 const stSave = (b,d) => { try{ localStorage.setItem(stKey(b),JSON.stringify(d)); }catch(e){} };
 const stClear = b => { try{ localStorage.removeItem(stKey(b)); }catch(e){} };
 async function stocktakeStart(){
-  let hist=[]; try{ const q=await db.collection("stocktakes").orderBy("at","desc").limit(10).get(); hist=q.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
+  let hist=[]; try{ const q=await db.collection("stocktakes").orderBy("at","desc").limit(50).get(); hist=q.docs.map(d=>({id:d.id,...d.data()})); }catch(e){}
   const bl=brands();
   openModal(`<h2>盤點</h2>
     <p class="hint">選要盤點的品牌，逐一填實際數量。中途離開也會保留進度，按「完成盤點」前庫存都不會改。</p>
     <label class="field">盤點範圍<select id="stB"><option value="">全部品牌</option>${bl.map(b=>`<option value="${esc(b)}" ${b===brandFilter?"selected":""}>${esc(b)}${stLoad(b)?"（有未完成的盤點）":""}</option>`).join("")}</select></label>
     ${stLoad("")?'<p class="hint">「全部品牌」有未完成的盤點。</p>':""}
     <div class="acts"><button class="btn" type="button" id="stNo">關閉</button><button class="btn primary" type="button" id="stGo">開始盤點</button></div>
-    ${hist.length?`<div class="section-h">最近的盤點</div><div class="cards">${hist.map(h=>`<div class="card"><div class="body"><span class="title">${esc(h.brand||"全部品牌")}</span><span class="meta">${fmtT(h.at)} · ${esc(who(h.by)||h.byName||"")} · 共 ${fmtN(h.counted)} 項，${h.diffCount?`<span class="tag low">${fmtN(h.diffCount)} 項有差異</span>`:'<span class="tag ok">全部相符</span>'}</span></div>${dl?`<button class="mini" type="button" data-stx="${esc(h.id)}">匯出</button>`:""}</div>`).join("")}</div>`:""}`, m=>{
+    ${hist.length?`<div class="section-h">盤點紀錄（點一下看明細）</div><div class="cards">${hist.map(h=>`<div class="card tap" tabindex="0" role="button" data-std="${esc(h.id)}"><div class="body"><span class="title">${esc(h.brand||"全部品牌")}</span><span class="meta">${fmtT(h.at)} · ${esc(who(h.by)||h.byName||"")} · 共 ${fmtN(h.counted)} 項，${h.diffCount?`<span class="tag low">${fmtN(h.diffCount)} 項有差異</span>`:'<span class="tag ok">全部相符</span>'}</span></div>${dl?`<button class="mini" type="button" data-stx="${esc(h.id)}">匯出</button>`:""}</div>`).join("")}</div>`:""}`, m=>{
     m.querySelector("#stNo").onclick=closeModal;
     m.querySelector("#stGo").onclick=()=>stocktakeSheet(m.querySelector("#stB").value);
-    m.querySelectorAll("[data-stx]").forEach(b=>b.onclick=()=>{ const h=hist.find(x=>x.id===b.dataset.stx); if(!h) return;
+    m.querySelectorAll("[data-std]").forEach(c=>c.onclick=e=>{ if(e.target.closest("[data-stx]")) return; const h=hist.find(x=>x.id===c.dataset.std); h&&stocktakeDetail(h); });
+    m.querySelectorAll("[data-stx]").forEach(b=>b.onclick=()=>{ const h=hist.find(x=>x.id===b.dataset.stx); h&&stocktakeExport(h); });
+  });
+}
+function stocktakeExport(h){
       const a=[[`${h.brand||"全部品牌"} 盤點 ${new Date(h.at).toLocaleString("zh-TW")}`].map(cell).join(","),"",["品牌","商品編號","商品","規格","系統數量","實際數量","差異"].map(cell).join(",")];
       (h.rows||[]).forEach(r=>a.push([r.brand,r.sku,r.name,r.variant,r.before,r.counted,r.diff].map(cell).join(",")));
-      saveCSV(`盤點_${h.brand||"全部"}_${new Date(h.at).toISOString().slice(0,10)}.csv`, a); });
+      saveCSV(`盤點_${h.brand||"全部"}_${new Date(h.at).toISOString().slice(0,10)}.csv`, a);
+}
+function stocktakeDetail(h){
+  const rows=(h.rows||[]).slice().sort((x,y)=>(y.diff?1:0)-(x.diff?1:0));
+  const d=new Date(h.at);
+  openModal(`<h2>盤點明細</h2>
+    <p class="hint">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} · ${esc(h.brand||"全部品牌")} · ${esc(who(h.by)||h.byName||"")}${h.note?" · "+esc(h.note):""}<br>共 ${fmtN(h.counted)} 項，實際總數 ${fmtN(rows.reduce((t,r)=>t+Number(r.counted||0),0))} 件，${h.diffCount?`${fmtN(h.diffCount)} 項有差異`:"全部相符"}</p>
+    <div class="stlist">${rows.map(r=>`<div class="strow${r.diff?" changed":""}"><div class="body"><span class="title">${esc(r.name)}${r.variant?`（${esc(r.variant)}）`:""}</span><span class="sys">${r.sku?"#"+esc(r.sku)+" · ":""}${h.brand?"":esc(r.brand)+" · "}系統 ${fmtN(r.before)}</span></div><span class="qty num">${fmtN(r.counted)}</span><span class="d ${r.diff>0?"plus":r.diff<0?"minus":""}">${r.diff?(r.diff>0?"+":"")+fmtN(r.diff):""}</span></div>`).join("")}</div>
+    <div class="acts">${dl?'<button class="btn" type="button" id="sdX">匯出 Excel</button>':""}<button class="btn primary" type="button" id="sdBack">返回</button></div>`, m=>{
+    m.querySelector("#sdBack").onclick=stocktakeStart;
+    const x=m.querySelector("#sdX"); if(x) x.onclick=()=>stocktakeExport(h);
   });
 }
 function stocktakeLines(brand){
@@ -1062,17 +1076,19 @@ function stocktakeReview(brand, draft){
       try{
         const at=Date.now(); const label="盤點"+(note?"："+note:"");
         const byItem={}; diffs.forEach(l=>{ (byItem[l.it.id] ||= []).push(l); });
-        const ops=[]; const rows=[];
+        const ops=[]; const rows=[]; const totals={};
+        lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key]; totals[l.it.id]=(totals[l.it.id]||0)+c; });
         for(const [id,ls] of Object.entries(byItem)){
           const fresh=(await db.collection("items").doc(id).get()).data(); if(!fresh) continue;
           let patch;
           if(hasVar(fresh)){ const vs=fresh.variants.map(v=>({...v})); ls.forEach(l=>{ const x=vs.find(v=>v.name===l.variant); if(x) x.qty=l.counted; }); patch={variants:vs,qty:varSum(vs)}; }
           else patch={qty:ls[0].counted};
-          ops.push({ref:db.collection("items").doc(id),data:{...patch,updatedAt:at}});
+          ops.push({ref:db.collection("items").doc(id),data:{...patch,lastCount:{at,qty:totals[id]},updatedAt:at}});
           ls.forEach(l=>{ const before=l.variant?Number(((fresh.variants||[]).find(v=>v.name===l.variant)||{}).qty||0):Number(fresh.qty||0);
             const d=l.counted-before; if(!d) return;
             ops.push({ref:db.collection("moves").doc(),data:{itemId:id,itemName:varLabel(fresh,l.variant),variant:l.variant,sku:fresh.sku||"",brand:fresh.brand||"",type:"adjust",qty:d,after:l.counted,note:label,by:myId||"",at}}); });
         }
+        Object.keys(totals).forEach(id=>{ if(!byItem[id]&&items.some(i=>i.id===id)) ops.push({ref:db.collection("items").doc(id),data:{lastCount:{at,qty:totals[id]}}}); });
         lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key]; rows.push({brand:l.it.brand||"",sku:l.it.sku||"",name:l.it.name,variant:l.variant,before:l.sys,counted:c,diff:c-l.sys}); });
         ops.push({ref:db.collection("stocktakes").doc(),data:{brand:brand||"",at,by:myId||"",byName:(meStaff&&meStaff.name)||"",note,counted:lines.length,diffCount:diffs.length,rows}});
         await commitOps(ops); stClear(brand); closeModal();
