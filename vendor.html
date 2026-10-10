@@ -95,6 +95,9 @@ button.stat{cursor:pointer}
 .tag{font-size:12px;font-weight:700;padding:1px 8px;border-radius:99px;background:var(--surface-2);color:var(--muted)}
 .tag.low{background:var(--warn-soft);color:var(--warn)} .tag.out{background:var(--bad-soft);color:var(--bad)} .tag.ok{background:var(--good-soft);color:var(--good)} .tag.cam{background:var(--accent-soft);color:var(--accent)}
 main{padding-bottom:40px}
+.pimg{width:64px;height:64px;border-radius:12px;object-fit:cover;flex:none;border:1px solid var(--line);background:#fff;cursor:zoom-in}
+.zoom{position:fixed;inset:0;background:rgba(20,12,8,.8);display:grid;place-items:center;z-index:9;padding:24px}
+.zoom img{max-width:100%;max-height:80vh;border-radius:16px;background:#fff}
 .card.sold{opacity:.55}
 .right{display:flex;flex-direction:column;align-items:flex-end;flex:none}
 .qty{font-size:22px;font-weight:900}
@@ -165,10 +168,12 @@ function render(){
   const q=$("#q").value.trim().toLowerCase(), sold=$("#showSold").checked;
   const rows=its.filter(i=>(sold||Number(i.qty)>0)&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
-  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}"><div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span>${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
+  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}">${i.image?`<img class="pimg" src="${esc(i.image)}" alt="" loading="lazy" data-big="${esc(i.image)}">`:""}<div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span>${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
     :`<div class="empty"><b>${its.length?"沒有符合的商品":"目前沒有在店的商品"}</b></div>`;
 }
-document.addEventListener("click",e=>{ const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
+document.addEventListener("click",e=>{ const z=e.target.closest(".zoom"); if(z){ z.remove(); return; }
+  const im=e.target.closest("[data-big]"); if(im){ const d=document.createElement("div"); d.className="zoom"; d.innerHTML=`<img src="${im.dataset.big}" alt="">`; document.body.appendChild(d); return; }
+  const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
 $("#q").oninput=()=>view&&render(); $("#showSold").onchange=()=>view&&render();
 (function(){
   const t=new URLSearchParams(location.search).get("t");

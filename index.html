@@ -506,6 +506,23 @@ function actionSheet(it){
 /* ---------- vendor stock links ---------- */
 // Each brand with a viewToken gets a public read-only doc vendorViews/{token} holding only stock fields. Any signed-in staff device keeps it current.
 const vendorSent={};
+// Product photos go to the vendor page as small thumbnails so a brand's whole list stays well under Firestore's 1 MB doc limit.
+const vThumbs={};
+async function vendorThumb(src){
+  if(!src) return "";
+  if(vThumbs[src]) return vThumbs[src];
+  const img=await new Promise((res,rej)=>{ const i=new Image(); i.onload=()=>res(i); i.onerror=rej; i.src=src; });
+  const S=160, c=document.createElement("canvas"); c.width=S; c.height=S; const x=c.getContext("2d");
+  x.fillStyle="#fff"; x.fillRect(0,0,S,S); x.drawImage(img,0,0,S,S);
+  return vThumbs[src]=c.toDataURL("image/jpeg",0.7);
+}
+async function vendorItems(b){
+  const list=JSON.parse(vendorPayload(b)); const src=items.filter(i=>i.brand===b);
+  let budget=850000;
+  for(const v of list){ const it=src.find(i=>(i.sku||"")===v.sku&&(i.name||"")===v.name); if(!it||!it.image) continue;
+    try{ const t=await vendorThumb(it.image); if(t.length<budget){ v.image=t; budget-=t.length; } }catch(e){} }
+  return list;
+}
 const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件",...(hasVar(i)?{variants:i.variants.map(v=>({name:v.name,qty:Number(v.qty||0)}))}:{})}))
   .sort((x,y)=>String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true})));
 let vendorTimer=null, itemsFresh=false;
@@ -513,9 +530,9 @@ function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout
 async function syncVendorViews(){
   if(!db||!itemsFresh) return;
   for(const d of brandDocs){ if(!d.viewToken||!d.name) continue;
-    const json=vendorPayload(d.name); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
+    const json=vendorPayload(d.name)+items.filter(i=>i.brand===d.name).map(i=>(i.image||"").length).join(","); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
     if(vendorSent[key]===json) continue;
-    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:JSON.parse(json),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
+    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:await vendorItems(d.name),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
   }
 }
 const vendorUrl = t => new URL("vendor.html?t="+t, location.href).href;
@@ -540,7 +557,7 @@ async function vendorAction(name, act, box){
     const ops=[]; if(d.viewToken) ops.push({ref:db.collection("vendorViews").doc(d.viewToken),del:true});
     const tok=act==="off"?"":newToken(); const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
     ops.push({ref:bref,data:d.id?{viewToken:tok}:{name,viewToken:tok}});
-    if(tok) ops.push({ref:db.collection("vendorViews").doc(tok),data:{brand:name,logo:brandImg(name),items:JSON.parse(vendorPayload(name)),updatedAt:Date.now()}});
+    if(tok) ops.push({ref:db.collection("vendorViews").doc(tok),data:{brand:name,logo:brandImg(name),items:await vendorItems(name),updatedAt:Date.now()}});
     await commitOps(ops);
     if(d.id) d.viewToken=tok; else brandDocs.push({id:bref.id,name,viewToken:tok});
     delete box.dataset.armed; box.innerHTML=vendorBox(name);
