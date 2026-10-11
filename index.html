@@ -187,6 +187,7 @@ button:focus-visible,.card.tap:focus-visible{outline:3px solid var(--accent);out
 .tag.lp{background:var(--good-soft);color:var(--good)}
 .strow{display:flex;align-items:center;gap:10px;padding:10px 0;border-bottom:1px solid var(--line)}
 .strow:last-child{border-bottom:0}
+.stmiss{flex-wrap:wrap;gap:6px;padding:6px 0 2px;margin-inline:0;overflow:visible}.stmiss .chip{padding:6px 12px;font-size:13px}.stmiss .chip.on{background:var(--bad);color:#fff;text-decoration:line-through}
 .strow .body{gap:1px}
 .strow .sys{font-size:12px;color:var(--muted)}
 .strow input{width:76px;flex:0 0 76px;text-align:center;font-weight:700;padding:9px 6px}
@@ -1027,7 +1028,7 @@ function stocktakeDetail(h){
   const d=new Date(h.at);
   openModal(`<h2>盤點明細</h2>
     <p class="hint">${d.getFullYear()}/${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())} · ${esc(h.brand||"全部品牌")} · ${esc(who(h.by)||h.byName||"")}${h.note?" · "+esc(h.note):""}<br>共 ${fmtN(h.counted)} 項，實際總數 ${fmtN(rows.reduce((t,r)=>t+Number(r.counted||0),0))} 件，${h.diffCount?`${fmtN(h.diffCount)} 項有差異`:"全部相符"}</p>
-    <div class="stlist">${rows.map(r=>`<div class="strow${r.diff?" changed":""}"><div class="body"><span class="title">${esc(r.name)}${r.variant?`（${esc(r.variant)}）`:""}</span><span class="sys">${r.sku?"#"+esc(r.sku)+" · ":""}${h.brand?"":esc(r.brand)+" · "}系統 ${fmtN(r.before)}</span></div><span class="qty num">${fmtN(r.counted)}</span><span class="d ${r.diff>0?"plus":r.diff<0?"minus":""}">${r.diff?(r.diff>0?"+":"")+fmtN(r.diff):""}</span></div>`).join("")}</div>
+    <div class="stlist">${rows.map(r=>`<div class="strow${r.diff?" changed":""}"><div class="body"><span class="title">${esc(r.name)}${r.variant?`（${esc(r.variant)}）`:""}</span><span class="sys">${r.sku?"#"+esc(r.sku)+" · ":""}${r.skus&&r.skus.length?fmtN(r.skus.length)+" 個編號 · ":""}${h.brand?"":esc(r.brand)+" · "}系統 ${fmtN(r.before)}${r.missing&&r.missing.length?" · 少了 "+r.missing.map(esc).join("、"):""}</span></div><span class="qty num">${fmtN(r.counted)}</span><span class="d ${r.diff>0?"plus":r.diff<0?"minus":""}">${r.diff?(r.diff>0?"+":"")+fmtN(r.diff):""}</span></div>`).join("")}</div>
     <div class="acts">${dl?'<button class="btn" type="button" id="sdX">匯出 Excel</button>':""}<button class="btn primary" type="button" id="sdBack">返回</button></div>`, m=>{
     m.querySelector("#sdBack").onclick=stocktakeStart;
     const x=m.querySelector("#sdX"); if(x) x.onclick=()=>stocktakeExport(h);
@@ -1036,12 +1037,20 @@ function stocktakeDetail(h){
 function stocktakeLines(brand){
   // one line per item, or per variant when the item has 規格
   const its=items.filter(i=>!brand||i.brand===brand).sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
-  const out=[]; its.forEach(i=>{ if(hasVar(i)) i.variants.forEach(v=>out.push({key:i.id+"|"+v.name,it:i,variant:v.name,sys:Number(v.qty||0)})); else out.push({key:i.id,it:i,variant:"",sys:Number(i.qty||0)}); });
-  return out;
+  // items that are the same product (same name once the 編號 is dropped, same category) are counted together, e.g. all 項鍊
+  const out=[]; const groups={};
+  its.forEach(i=>{ if(hasVar(i)) return i.variants.forEach(v=>out.push({key:i.id+"|"+v.name,it:i,variant:v.name,sys:Number(v.qty||0)}));
+    const k="g:"+[i.brand||"",i.category||"",stBase(i)].join("|");
+    if(groups[k]) groups[k].members.push(i); else out.push(groups[k]={key:k,it:i,variant:"",members:[i]}); });
+  return out.map(l=>{ if(!l.members) return l; if(l.members.length===1) return {key:l.it.id,it:l.it,variant:"",sys:Number(l.it.qty||0)};
+    return {...l,name:stBase(l.it),sys:l.members.reduce((t,i)=>t+Number(i.qty||0),0)}; });
 }
+function stBase(i){ const n=String(i.name||"").trim(); const k=String(i.sku||"").trim(); return (k&&n.includes(k)?n.replace(k,"").replace(/\s+/g," ").trim():n)||n; }
+const stName=l=>l.members?`${esc(l.name)}<span class="tag" style="margin-left:6px">${fmtN(l.members.length)} 個編號</span>`:`${esc(l.it.name)}${l.variant?`（${esc(l.variant)}）`:""}`;
+const stSub=(l,brand)=>(l.members?"":l.it.sku?"#"+esc(l.it.sku)+" · ":"")+(brand?"":esc(l.it.brand)+" · ");
 function stocktakeSheet(brand){
   const lines=stocktakeLines(brand); const draft=stLoad(brand)||{counts:{},started:Date.now()};
-  const row=l=>{ const c=draft.counts[l.key]; return `<div class="strow" data-k="${esc(l.key)}">${avatar(l.it.brand,l.it.name,l.it.category,l.it.image)}<div class="body"><span class="title">${esc(l.it.name)}${l.variant?`（${esc(l.variant)}）`:""}</span><span class="sys">${l.it.sku?"#"+esc(l.it.sku)+" · ":""}${brand?"":esc(l.it.brand)+" · "}系統 ${fmtN(l.sys)}</span></div><input type="number" min="0" step="1" inputmode="numeric" aria-label="實際數量" placeholder="${fmtN(l.sys)}" value="${c==null?"":esc(c)}"><span class="d"></span></div>`; };
+  const row=l=>{ const c=draft.counts[l.key]; return `<div class="strow" data-k="${esc(l.key)}">${avatar(l.it.brand,l.it.name,l.it.category,l.it.image)}<div class="body"><span class="title">${stName(l)}</span><span class="sys">${stSub(l,brand)}系統 ${fmtN(l.sys)}</span></div><input type="number" min="0" step="1" inputmode="numeric" aria-label="實際數量" placeholder="${fmtN(l.sys)}" value="${c==null?"":esc(c)}"><span class="d"></span></div>`; };
   openModal(`<h2>盤點：${esc(brand||"全部品牌")}</h2>
     <p class="hint">數量跟系統一樣可以留空；不一樣才填實際數量。</p>
     <label class="search" style="box-shadow:none;background:var(--surface-2)"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="stQ" type="search" placeholder="搜尋編號或名稱" aria-label="搜尋"></label>
@@ -1056,7 +1065,7 @@ function stocktakeSheet(brand){
       m.querySelector("#stSum").textContent=`共 ${fmtN(lines.length)} 項，已填 ${fmtN(n)} 項，${changed?`${fmtN(changed)} 項跟系統不同`:"目前都相符"}`; };
     paint();
     list.addEventListener("input",e=>{ const r=e.target.closest(".strow"); if(!r) return; const v=e.target.value; if(v==="") delete draft.counts[r.dataset.k]; else draft.counts[r.dataset.k]=Math.max(0,Math.floor(Number(v)||0)); stSave(brand,draft); paint(); });
-    m.querySelector("#stQ").oninput=e=>{ const q=e.target.value.trim().toLowerCase(); list.querySelectorAll(".strow").forEach(r=>{ const l=lines.find(x=>x.key===r.dataset.k); r.hidden=!!q&&![l.it.name,l.it.sku,l.variant].join(" ").toLowerCase().includes(q); }); };
+    m.querySelector("#stQ").oninput=e=>{ const q=e.target.value.trim().toLowerCase(); list.querySelectorAll(".strow").forEach(r=>{ const l=lines.find(x=>x.key===r.dataset.k); r.hidden=!!q&&![l.name,...(l.members||[l.it]).map(i=>i.name+" "+(i.sku||"")),l.variant].join(" ").toLowerCase().includes(q); }); };
     m.querySelector("#stLater").onclick=()=>{ stSave(brand,draft); closeModal(); toast("盤點進度已保存"); };
     m.querySelector("#stDone").onclick=()=>stocktakeReview(brand, draft);
   });
@@ -1064,20 +1073,36 @@ function stocktakeSheet(brand){
 function stocktakeReview(brand, draft){
   const lines=stocktakeLines(brand);
   const diffs=lines.map(l=>({...l,counted:draft.counts[l.key]==null?l.sys:draft.counts[l.key]})).filter(l=>l.counted!==l.sys);
+  const miss={}; // group key -> {itemId: how many of that 編號 are missing}
+  const groupHint=l=>{ const d=l.counted-l.sys; if(!l.members) return "";
+    if(d>0) return `<span class="sys">多出的 ${fmtN(d)} 個會加在 ${esc(l.members[0].sku?"#"+l.members[0].sku:l.members[0].name)}</span>`;
+    return `<span class="sys">少了 ${fmtN(-d)} 個，請點出是哪幾個編號：</span><div class="chips stmiss" data-g="${esc(l.key)}">${l.members.filter(i=>Number(i.qty||0)>0).map(i=>`<button type="button" class="chip" data-mi="${esc(i.id)}">${esc(i.sku||i.name)}</button>`).join("")}</div>`; };
   openModal(`<h2>確認盤點結果</h2>
     <p>${diffs.length?`有 <b>${fmtN(diffs.length)}</b> 項跟系統不同，確認後會把庫存改成實際數量：`:"全部跟系統相符，不需要調整庫存。"}</p>
-    ${diffs.length?`<div class="stlist">${diffs.map(l=>{ const d=l.counted-l.sys; return `<div class="strow"><div class="body"><span class="title">${esc(l.it.name)}${l.variant?`（${esc(l.variant)}）`:""}</span><span class="sys">系統 ${fmtN(l.sys)} → 實際 ${fmtN(l.counted)}</span></div><span class="d ${d>0?"plus":"minus"}">${d>0?"+":""}${fmtN(d)}</span></div>`; }).join("")}</div>`:""}
+    ${diffs.length?`<div class="stlist">${diffs.map(l=>{ const d=l.counted-l.sys; return `<div class="strow" style="flex-wrap:wrap"><div class="body"><span class="title">${stName(l)}</span><span class="sys">系統 ${fmtN(l.sys)} → 實際 ${fmtN(l.counted)}</span></div><span class="d ${d>0?"plus":"minus"}">${d>0?"+":""}${fmtN(d)}</span>${l.members?`<div style="flex-basis:100%">${groupHint(l)}</div>`:""}</div>`; }).join("")}</div>`:""}
     <label class="field">備註（選填）<input id="stNote" maxlength="200" placeholder="例如：月底盤點"></label>
     <p class="err" id="stErr" hidden></p>
     <div class="acts"><button class="btn" type="button" id="stBack">回去修改</button><button class="btn primary" type="button" id="stApply">確認，完成盤點</button></div>`, m=>{
     m.querySelector("#stBack").onclick=()=>stocktakeSheet(brand);
+    m.querySelectorAll(".stmiss").forEach(box=>box.onclick=e=>{ const c=e.target.closest("[data-mi]"); if(!c) return;
+      const l=diffs.find(x=>x.key===box.dataset.g); const it=l.members.find(i=>i.id===c.dataset.mi); const g=(miss[l.key] ||= {});
+      const n=((g[it.id]||0)+1)%(Number(it.qty||0)+1); if(n) g[it.id]=n; else delete g[it.id];
+      m.querySelector("#stErr").hidden=true; c.classList.toggle("on",!!n); c.textContent=(it.sku||it.name)+(n>1?` ×${n}`:""); });
     m.querySelector("#stApply").onclick=async()=>{
+      const errP=m.querySelector("#stErr");
+      const bad=diffs.find(l=>l.members&&l.counted<l.sys&&Object.values(miss[l.key]||{}).reduce((t,n)=>t+n,0)!==l.sys-l.counted);
+      if(bad){ errP.textContent=`「${bad.name}」少了 ${fmtN(bad.sys-bad.counted)} 個，請點選剛好 ${fmtN(bad.sys-bad.counted)} 個編號`; errP.hidden=false; return; }
       const btn=m.querySelector("#stApply"); btn.disabled=true; const note=m.querySelector("#stNote").value.trim();
+      // turn each counted group back into one line per 編號
+      const perItem=l=>{ if(!l.members) return [l]; const d=l.counted-l.sys, g=miss[l.key]||{};
+        return l.members.map((i,ix)=>{ const sys=Number(i.qty||0); return {key:i.id,it:i,variant:"",sys,counted:sys-(g[i.id]||0)+(d>0&&ix===0?d:0)}; }); };
+      const lines2=lines.flatMap(l=>perItem({...l,counted:draft.counts[l.key]==null?l.sys:draft.counts[l.key]}));
+      const diffs2=lines2.filter(l=>l.counted!==l.sys);
       try{
         const at=Date.now(); const label="盤點"+(note?"："+note:"");
-        const byItem={}; diffs.forEach(l=>{ (byItem[l.it.id] ||= []).push(l); });
+        const byItem={}; diffs2.forEach(l=>{ (byItem[l.it.id] ||= []).push(l); });
         const ops=[]; const rows=[]; const totals={};
-        lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key]; totals[l.it.id]=(totals[l.it.id]||0)+c; });
+        lines2.forEach(l=>{ totals[l.it.id]=(totals[l.it.id]||0)+l.counted; });
         for(const [id,ls] of Object.entries(byItem)){
           const fresh=(await db.collection("items").doc(id).get()).data(); if(!fresh) continue;
           let patch;
@@ -1089,7 +1114,9 @@ function stocktakeReview(brand, draft){
             ops.push({ref:db.collection("moves").doc(),data:{itemId:id,itemName:varLabel(fresh,l.variant),variant:l.variant,sku:fresh.sku||"",brand:fresh.brand||"",type:"adjust",qty:d,after:l.counted,note:label,by:myId||"",at}}); });
         }
         Object.keys(totals).forEach(id=>{ if(!byItem[id]&&items.some(i=>i.id===id)) ops.push({ref:db.collection("items").doc(id),data:{lastCount:{at,qty:totals[id]}}}); });
-        lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key]; rows.push({brand:l.it.brand||"",sku:l.it.sku||"",name:l.it.name,variant:l.variant,before:l.sys,counted:c,diff:c-l.sys}); });
+        lines.forEach(l=>{ const c=draft.counts[l.key]==null?l.sys:draft.counts[l.key];
+          if(l.members){ const g=miss[l.key]||{}; rows.push({brand:l.it.brand||"",sku:"",name:l.name,variant:"",before:l.sys,counted:c,diff:c-l.sys,skus:l.members.map(i=>i.sku||"").filter(Boolean),missing:l.members.filter(i=>g[i.id]).map(i=>(i.sku||i.name)+(g[i.id]>1?"×"+g[i.id]:""))}); }
+          else rows.push({brand:l.it.brand||"",sku:l.it.sku||"",name:l.it.name,variant:l.variant,before:l.sys,counted:c,diff:c-l.sys}); });
         ops.push({ref:db.collection("stocktakes").doc(),data:{brand:brand||"",at,by:myId||"",byName:(meStaff&&meStaff.name)||"",note,counted:lines.length,diffCount:diffs.length,rows}});
         await commitOps(ops); stClear(brand); closeModal();
         toast(diffs.length?`盤點完成，調整了 ${diffs.length} 項`:"盤點完成，全部相符");
