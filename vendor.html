@@ -143,12 +143,17 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .tile .ph{aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;font-family:var(--f-head);font-size:28px;font-weight:900;color:var(--muted)}
 .tile .ph img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
 .tile .tb{padding:8px 10px 10px;display:flex;flex-direction:column;gap:3px}
-.tile .code{font-weight:900;font-size:16px;display:flex;justify-content:space-between;gap:6px;align-items:baseline}
-.tile .code .q{font-family:var(--f-head);font-size:18px;white-space:nowrap}
-.tile .code .q small{font-size:11px;color:var(--muted);font-family:var(--f-body);margin-left:1px}
 .tile .nm{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
 .tile.sold{opacity:.5}
 #list{display:flex;flex-direction:column;gap:16px}
+.vt{display:flex;align-self:flex-end;background:var(--surface-2);border-radius:99px;padding:3px;gap:2px}
+.vt button{border:0;background:none;font:inherit;font-size:14px;font-weight:700;color:var(--muted);padding:6px 14px;border-radius:99px;cursor:pointer}
+.vt button[aria-pressed="true"]{background:var(--surface);color:var(--ink);box-shadow:var(--shadow)}
+.tile .nm2{font-weight:800;font-size:15px;line-height:1.35;overflow-wrap:anywhere;display:-webkit-box;-webkit-line-clamp:3;-webkit-box-orient:vertical;overflow:hidden}
+.tile .row{display:flex;justify-content:space-between;align-items:baseline;gap:6px;font-size:13px;color:var(--muted)}
+.tile .row .q{font-family:var(--f-head);font-size:18px;font-weight:900;color:var(--ink);white-space:nowrap}
+.tile .row .q small{font-size:11px;color:var(--muted);font-family:var(--f-body);margin-left:1px;font-weight:500}
+.lst{display:flex;flex-direction:column;gap:8px}
 </style>
 </head>
 <body>
@@ -164,6 +169,7 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
       <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋編號或商品名稱" aria-label="搜尋"></label>
       <div class="section-h" id="catH" hidden>各分類剩餘數量（點一下只看這類）</div>
       <div class="cats" id="catChips"></div>
+      <div class="vt" role="group" aria-label="顯示方式"><button type="button" data-vm="grid">▦ 格狀</button><button type="button" data-vm="list">☰ 清單</button></div>
     </div>
     <div id="list"><div class="empty">讀取中…</div></div>
     <p class="foot">✿ 旗時 · 永樂市場 2F 寄售庫存，只顯示你的品牌 ✿</p>
@@ -177,7 +183,7 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const money=n=>"$"+Math.round(Number(n||0)).toLocaleString("en-US");
 const fmtN=n=>Number(n||0).toLocaleString("en-US");
-let view=null, cat="";
+let view=null, cat="", mode="grid"; try{ mode=localStorage.getItem("vendorMode")==="list"?"list":"grid"; }catch(e){}
 function fail(t){ $("#upd").textContent=""; $("#list").innerHTML=`<div class="empty"><b>${esc(t)}</b>請向永樂索取最新的連結。</div>`; }
 function render(){
   const its=view.items||[]; const inStock=its.filter(i=>Number(i.qty)>0);
@@ -192,18 +198,21 @@ function render(){
   const q=$("#q").value.trim().toLowerCase();
   const rows=its.filter(i=>Number(i.qty)>0&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
-  const tile=i=>{ const out=!(Number(i.qty)>0); const short=i.sku||"";
-    return `<div class="tile${out?" sold":""}">${i.image?`<div class="ph"><img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" data-big="${esc(i.image)}"></div>`:""}
-      <div class="tb"><span class="code"><span>${esc(short||i.name)}</span><span class="q num">${out?'<span class="tag out">已售完</span>':`${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small>`}</span></span>
-      <span class="nm">${short?"":esc(i.name)+" · "}${money(i.price)}</span>
-      ${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div></div>`; };
+  const vars=i=>(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:"";
+  const qty=i=>`<span class="q num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span>`;
+  const big=i=>i.image?`data-big="${esc(i.image)}"`:"";
+  const tile=i=>`<div class="tile">${i.image?`<div class="ph"><img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" ${big(i)}></div>`:""}
+      <div class="tb"><span class="nm2">${esc(i.sku||i.name)}</span><span class="row"><span>${money(i.price)}</span>${qty(i)}</span>${vars(i)}</div></div>`;
+  const line=i=>`<div class="card">${i.image?`<img class="pimg" src="${esc(i.image)}" alt="" loading="lazy" ${big(i)}>`:""}<div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span></span>${vars(i)}</div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`;
+  document.querySelectorAll("[data-vm]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.vm===mode)));
   const groups=[]; rows.forEach(i=>{ const c=i.category||""; let g=groups.find(x=>x.c===c); if(!g) groups.push(g={c,list:[]}); g.list.push(i); });
   groups.sort((a,b)=>a.c.localeCompare(b.c,"zh-Hant",{numeric:true}));
-  $("#list").innerHTML=rows.length?groups.map(g=>`<section class="grp">${g.c||groups.length>1?`<h3>${esc(g.c||"其他")}<span>剩 ${fmtN(g.list.reduce((t,i)=>t+Number(i.qty||0),0))} 件</span></h3>`:""}<div class="tiles">${g.list.map(tile).join("")}</div></section>`).join("")
+  $("#list").innerHTML=rows.length?groups.map(g=>`<section class="grp">${g.c||groups.length>1?`<h3>${esc(g.c||"其他")}<span>剩 ${fmtN(g.list.reduce((t,i)=>t+Number(i.qty||0),0))} 件</span></h3>`:""}${mode==="list"?`<div class="lst">${g.list.map(line).join("")}</div>`:`<div class="tiles">${g.list.map(tile).join("")}</div>`}</section>`).join("")
     :`<div class="empty"><b>${its.length?"沒有符合的商品":"目前沒有在店的商品"}</b></div>`;
 }
 document.addEventListener("click",e=>{ const z=e.target.closest(".zoom"); if(z){ z.remove(); return; }
   const im=e.target.closest("[data-big]"); if(im){ const d=document.createElement("div"); d.className="zoom"; d.innerHTML=`<img src="${im.dataset.big}" alt="">`; document.body.appendChild(d); return; }
+  const vm=e.target.closest("[data-vm]"); if(vm){ mode=vm.dataset.vm; try{ localStorage.setItem("vendorMode",mode); }catch(e){} view&&render(); return; }
   const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
 $("#q").oninput=()=>view&&render();
 (function(){
