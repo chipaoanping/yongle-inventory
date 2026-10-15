@@ -1324,8 +1324,11 @@ async function importMigration(file){
 
 async function start(u){
   const em=lower(u.email);
-  let s=null; try{ s=await db.collection("staff").doc(em).get(); }catch(e){}
-  if(!s||!s.exists){ waitingScreen(u); return; }
+  // a flaky connection must not look like being signed out: fall back to the cached staff record, then keep retrying
+  const ref=db.collection("staff").doc(em); let s=null;
+  try{ s=await ref.get(); }catch(e){ try{ s=await ref.get({source:"cache"}); }catch(e2){} }
+  if(!s){ gate(`<div class="gatebox"><h1>連線中…</h1><p>網路不穩，正在重新連線，不需要重新登入。</p></div>`); setTimeout(()=>{ if(auth.currentUser&&auth.currentUser.uid===u.uid&&!meStaff) start(u); },3000); return; }
+  if(!s.exists){ waitingScreen(u); return; }
   meStaff=s.data(); myId=u.uid;
   if(meStaff.uid!==u.uid){ try{ await db.collection("staff").doc(em).update({uid:u.uid}); }catch(e){} }
   gate("");
@@ -1359,6 +1362,7 @@ if(!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey){
 }else{
   db = firebase.firestore();
   db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
+  try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{}); }catch(e){}
   loginScreen();
   auth.onAuthStateChanged(u=>{ unsubs.forEach(f=>f()); unsubs=[]; meStaff=null; if(u) start(u); else loginScreen(); });
 }
