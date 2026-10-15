@@ -127,6 +127,28 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .sheet{border-top:3px solid var(--accent)}
 .sheet::before{background:var(--accent);opacity:.35}
 .gatebox h1::after{content:"✿ 寄售庫存 ✿";display:block;font-family:var(--f-body);font-size:13px;letter-spacing:.2em;color:var(--accent);margin-top:4px;font-weight:700}
+.cats{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}
+.cat{background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:10px 12px;font:inherit;color:inherit;text-align:left;cursor:pointer;display:flex;flex-direction:column;gap:2px;box-shadow:var(--shadow)}
+.cat .k{font-size:13px;font-weight:700;color:var(--muted)}
+.cat .v{font-family:var(--f-head);font-size:26px;font-weight:900;line-height:1.1}
+.cat .v small{font-size:12px;font-weight:500;color:var(--muted);margin-left:3px;font-family:var(--f-body)}
+.cat[aria-pressed="true"]{background:var(--accent);border-color:var(--accent);color:#fffaf1}
+.cat[aria-pressed="true"] .k,.cat[aria-pressed="true"] small{color:#fffaf1}
+.cat.zero .v{color:var(--bad)}
+.grp{display:flex;flex-direction:column;gap:10px}
+.grp h3{margin:6px 0 0;font-family:var(--f-head);font-size:17px;display:flex;align-items:baseline;gap:8px}
+.grp h3 span{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:700}
+.tiles{display:grid;grid-template-columns:repeat(auto-fill,minmax(108px,1fr));gap:10px}
+.tile{background:var(--surface);border:1px solid var(--line);border-radius:14px;overflow:hidden;display:flex;flex-direction:column;box-shadow:var(--shadow);min-width:0}
+.tile .ph{aspect-ratio:1;background:var(--surface-2);display:grid;place-items:center;font-family:var(--f-head);font-size:28px;font-weight:900;color:var(--muted)}
+.tile .ph img{width:100%;height:100%;object-fit:cover;cursor:zoom-in;display:block}
+.tile .tb{padding:8px 10px 10px;display:flex;flex-direction:column;gap:3px}
+.tile .code{font-weight:900;font-size:16px;display:flex;justify-content:space-between;gap:6px;align-items:baseline}
+.tile .code .q{font-family:var(--f-head);font-size:18px;white-space:nowrap}
+.tile .code .q small{font-size:11px;color:var(--muted);font-family:var(--f-body);margin-left:1px}
+.tile .nm{font-size:13px;color:var(--muted);overflow-wrap:anywhere}
+.tile.sold{opacity:.5}
+#list{display:flex;flex-direction:column;gap:16px}
 </style>
 </head>
 <body>
@@ -140,10 +162,11 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
     </div>
     <div id="tools" hidden style="display:flex;flex-direction:column;gap:12px">
       <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋編號或商品名稱" aria-label="搜尋"></label>
-      <div class="chips" id="catChips"></div>
+      <div class="section-h" id="catH" hidden>各分類剩餘數量（點一下只看這類）</div>
+      <div class="cats" id="catChips"></div>
       <label class="chk"><input type="checkbox" id="showSold">顯示已售完的商品</label>
     </div>
-    <div class="cards" id="list"><div class="empty">讀取中…</div></div>
+    <div id="list"><div class="empty">讀取中…</div></div>
     <p class="foot">✿ 旗時 · 永樂市場 2F 寄售庫存，只顯示你的品牌 ✿</p>
   </div>
 </main>
@@ -163,12 +186,21 @@ function render(){
   $("#sVal").textContent=money(inStock.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0));
   const cats=[...new Set(its.map(i=>i.category||"").filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant",{numeric:true}));
   if(cat&&!cats.includes(cat)) cat="";
-  $("#catChips").hidden=!cats.length;
-  $("#catChips").innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!cat}">全部</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${cat===c}">${esc(c)}</button>`)).join("");
+  const left=c=>its.filter(i=>(i.category||"")===c).reduce((t,i)=>t+Number(i.qty||0),0);
+  $("#catChips").hidden=$("#catH").hidden=!cats.length;
+  $("#catChips").innerHTML=[`<button class="cat" type="button" data-cf="" aria-pressed="${!cat}"><span class="k">全部</span><span class="v num">${fmtN(inStock.reduce((t,i)=>t+Number(i.qty||0),0))}<small>件</small></span></button>`]
+    .concat(cats.map(c=>{ const n=left(c); return `<button class="cat${n?"":" zero"}" type="button" data-cf="${esc(c)}" aria-pressed="${cat===c}"><span class="k">${esc(c)}</span><span class="v num">${n?`剩 ${fmtN(n)}`:"沒了"}<small>${n?"件":""}</small></span></button>`; })).join("");
   const q=$("#q").value.trim().toLowerCase(), sold=$("#showSold").checked;
   const rows=its.filter(i=>(sold||Number(i.qty)>0)&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
-  $("#list").innerHTML=rows.length?rows.map(i=>`<div class="card${Number(i.qty)>0?"":" sold"}">${i.image?`<img class="pimg" src="${esc(i.image)}" alt="" loading="lazy" data-big="${esc(i.image)}">`:""}<div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span>${i.category?`<span>${esc(i.category)}</span>`:""}${Number(i.qty)>0?"":'<span class="tag out">已售完</span>'}</span>${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`).join("")
+  const tile=i=>{ const out=!(Number(i.qty)>0); const short=i.sku||"";
+    return `<div class="tile${out?" sold":""}">${i.image?`<div class="ph"><img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" data-big="${esc(i.image)}"></div>`:""}
+      <div class="tb"><span class="code"><span>${esc(short||i.name)}</span><span class="q num">${out?'<span class="tag out">已售完</span>':`${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small>`}</span></span>
+      <span class="nm">${short?"":esc(i.name)+" · "}${money(i.price)}</span>
+      ${(i.variants||[]).length?`<span class="meta">${i.variants.map(x=>`<span class="tag${Number(x.qty)>0?"":" out"}">${esc(x.name)} ×${fmtN(x.qty)}</span>`).join("")}</span>`:""}</div></div>`; };
+  const groups=[]; rows.forEach(i=>{ const c=i.category||""; let g=groups.find(x=>x.c===c); if(!g) groups.push(g={c,list:[]}); g.list.push(i); });
+  groups.sort((a,b)=>a.c.localeCompare(b.c,"zh-Hant",{numeric:true}));
+  $("#list").innerHTML=rows.length?groups.map(g=>`<section class="grp">${g.c||groups.length>1?`<h3>${esc(g.c||"其他")}<span>剩 ${fmtN(g.list.reduce((t,i)=>t+Number(i.qty||0),0))} 件</span></h3>`:""}<div class="tiles">${g.list.map(tile).join("")}</div></section>`).join("")
     :`<div class="empty"><b>${its.length?"沒有符合的商品":"目前沒有在店的商品"}</b></div>`;
 }
 document.addEventListener("click",e=>{ const z=e.target.closest(".zoom"); if(z){ z.remove(); return; }
