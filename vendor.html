@@ -164,7 +164,6 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
       <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋編號或商品名稱" aria-label="搜尋"></label>
       <div class="section-h" id="catH" hidden>各分類剩餘數量（點一下只看這類）</div>
       <div class="cats" id="catChips"></div>
-      <label class="chk"><input type="checkbox" id="showSold">顯示已售完的商品</label>
     </div>
     <div id="list"><div class="empty">讀取中…</div></div>
     <p class="foot">✿ 旗時 · 永樂市場 2F 寄售庫存，只顯示你的品牌 ✿</p>
@@ -190,8 +189,8 @@ function render(){
   $("#catChips").hidden=$("#catH").hidden=!cats.length;
   $("#catChips").innerHTML=[`<button class="cat" type="button" data-cf="" aria-pressed="${!cat}"><span class="k">全部</span><span class="v num">${fmtN(inStock.reduce((t,i)=>t+Number(i.qty||0),0))}<small>件</small></span></button>`]
     .concat(cats.map(c=>{ const n=left(c); return `<button class="cat${n?"":" zero"}" type="button" data-cf="${esc(c)}" aria-pressed="${cat===c}"><span class="k">${esc(c)}</span><span class="v num">${n?`剩 ${fmtN(n)}`:"沒了"}<small>${n?"件":""}</small></span></button>`; })).join("");
-  const q=$("#q").value.trim().toLowerCase(), sold=$("#showSold").checked;
-  const rows=its.filter(i=>(sold||Number(i.qty)>0)&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
+  const q=$("#q").value.trim().toLowerCase();
+  const rows=its.filter(i=>Number(i.qty)>0&&(!cat||i.category===cat)&&(!q||[i.name,i.sku,i.category].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>(Number(y.qty)>0)-(Number(x.qty)>0)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
   const tile=i=>{ const out=!(Number(i.qty)>0); const short=i.sku||"";
     return `<div class="tile${out?" sold":""}">${i.image?`<div class="ph"><img src="${esc(i.image)}" alt="${esc(i.name)}" loading="lazy" data-big="${esc(i.image)}"></div>`:""}
@@ -206,7 +205,7 @@ function render(){
 document.addEventListener("click",e=>{ const z=e.target.closest(".zoom"); if(z){ z.remove(); return; }
   const im=e.target.closest("[data-big]"); if(im){ const d=document.createElement("div"); d.className="zoom"; d.innerHTML=`<img src="${im.dataset.big}" alt="">`; document.body.appendChild(d); return; }
   const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
-$("#q").oninput=()=>view&&render(); $("#showSold").onchange=()=>view&&render();
+$("#q").oninput=()=>view&&render();
 (function(){
   const t=new URLSearchParams(location.search).get("t");
   if(!t||!/^[a-f0-9]{16,64}$/.test(t)) return fail("連結不完整");
