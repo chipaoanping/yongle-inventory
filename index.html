@@ -621,6 +621,8 @@ async function vendorItems(b){
 }
 const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件",...(hasVar(i)?{variants:i.variants.map(v=>({name:v.name,qty:Number(v.qty||0)}))}:{})}))
   .sort((x,y)=>String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true})));
+// With offline persistence the first snapshot comes from the cache, and if the server has nothing newer no second snapshot fires unless metadata changes are included, so the vendor page would never refresh.
+const META={includeMetadataChanges:true};
 let vendorTimer=null, itemsFresh=false, movesFresh=false, settlesFresh=false;
 const VENDOR_SALES_MONTHS=3, VENDOR_SHOW_PAYOUT=true;
 function vendorSales(b){
@@ -1416,11 +1418,11 @@ function subscribe(){
   const conn=$("#conn");
   const ok=()=>{ conn.textContent=navigator.onLine?"已同步":"離線中"; conn.className="sync "+(navigator.onLine?"ok":"bad"); };
   ok(); window.addEventListener("online",ok); window.addEventListener("offline",ok);
-  unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); itemsFresh=!(s.metadata&&s.metadata.fromCache); renderSummary(); renderItems(); renderMore(); scheduleVendorSync(); },
+  unsubs.push(db.collection("items").onSnapshot(META,s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); itemsFresh=!(s.metadata&&s.metadata.fromCache); renderSummary(); renderItems(); renderMore(); scheduleVendorSync(); },
     e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
-  unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); movesFresh=!(s.metadata&&s.metadata.fromCache); scheduleVendorSync(); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
+  unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(META,s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); movesFresh=!(s.metadata&&s.metadata.fromCache); scheduleVendorSync(); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); scheduleVendorSync(); }, ()=>{}));
-  unsubs.push(db.collection("settlements").onSnapshot(s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); settlesFresh=!(s.metadata&&s.metadata.fromCache); renderSettle(); scheduleVendorSync(); }, ()=>{}));
+  unsubs.push(db.collection("settlements").onSnapshot(META,s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); settlesFresh=!(s.metadata&&s.metadata.fromCache); renderSettle(); scheduleVendorSync(); }, ()=>{}));
   unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));
   if(isOwner()) unsubs.push(db.collection("requests").onSnapshot(s=>{ requestDocs=s.docs.map(d=>d.data()); renderStaff(); }, ()=>{}));
 }
