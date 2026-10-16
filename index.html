@@ -254,6 +254,8 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .card.selc .ck{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-weight:900;color:#fff}
 .card.selc.on{outline:2px solid var(--accent);outline-offset:-2px}
 .card.selc.on .ck{background:var(--accent);border-color:var(--accent)}
+.scard .period{font-size:13px;color:var(--muted);padding:10px 16px 0;border-top:1px dashed var(--line);margin-top:8px}
+.scard .period b{color:var(--ink);font-size:15px}
 </style>
 </head>
 <body>
@@ -500,6 +502,11 @@ function settleRows(mk, all){
   return Object.values(by).sort((a,b)=>a.brand.localeCompare(b.brand,"zh-Hant"));
 }
 
+// statements are monthly, payment covers two months: Jan–Feb, Mar–Apr, … paid the month after
+const PAY_MONTHS=2;
+function periodOf(mk){ const [y,m]=mk.split("-").map(Number); const s=m-((m-1)%PAY_MONTHS); return Array.from({length:PAY_MONTHS},(_,k)=>{ const d=new Date(y,s-1+k,1); return monthKey(d.getTime()); }); }
+const periodLabel=mk=>{ const ms=periodOf(mk).map(x=>Number(x.slice(5))); const due=new Date(Number(mk.slice(0,4)),ms[0]-1+PAY_MONTHS,1); return {range:`${ms[0]}–${ms[ms.length-1]} 月`,due:`${due.getMonth()+1} 月`}; };
+function periodPayout(mk,brand){ return periodOf(mk).map(m=>({m,r:settleRows(m).find(x=>x.brand===brand)})); }
 function renderSettle(){
   const [y,mo]=curMonth.split("-"); $("#mLabel").textContent=`${y} 年 ${Number(mo)} 月`;
   if(!db) return;
@@ -509,15 +516,18 @@ function renderSettle(){
   rows.sort((a,b)=>(b.count>0)-(a.count>0)||a.brand.localeCompare(b.brand,"zh-Hant"));
   $("#settleList").innerHTML=rows.map(r=>{
     const s=settles[`${curMonth}_${brandKey(r.brand)}`]; const paid=s&&s.paid; const open=openBrand===r.brand;
+    const pp=periodPayout(curMonth,r.brand); const pl=periodLabel(curMonth); const ptotal=pp.reduce((t,x)=>t+(x.r?x.r.payout:0),0);
+    const pAny=pp.some(x=>x.r&&x.r.count); const pPaid=pp.every(x=>!(x.r&&x.r.count)||(settles[`${x.m}_${brandKey(r.brand)}`]||{}).paid);
     return `<div class="scard">
       <div class="head" data-brand="${esc(r.brand)}" role="button" tabindex="0" aria-expanded="${open}">
         ${avatar(r.brand)}
         <div class="body"><span class="title">${esc(r.brand)}</span><span class="meta">${r.count?`售出 ${fmtN(r.count)} 件 ${paid?`<span class="tag ok">已付 ${esc(s.paidOn||"")}</span>`:'<span class="tag low">未付</span>'}`:"這個月沒有售出"}</span></div>
         <svg class="i" viewBox="0 0 24 24" style="transform:rotate(${open?90:0}deg)"><path d="m9 18 6-6-6-6"/></svg>
       </div>
-      <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">付給店家<b class="num">${money(r.payout)}</b></div></div>
+      <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">本月付給店家<b class="num">${money(r.payout)}</b></div></div>
+      ${pAny?`<div class="period">付款期 ${pl.range}（${pl.due}付）：${pp.map(x=>`${Number(x.m.slice(5))} 月 ${money(x.r?x.r.payout:0)}`).join(" ＋ ")} ＝ <b class="num">${money(ptotal)}</b>${pPaid?' <span class="tag ok">已付</span>':""}</div>`:""}
       ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtT(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
-      <div class="foot">${dl&&r.count?`<button class="payb" type="button" data-exb="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">匯出對帳單</button>`:""}${!r.count?"":paid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記已付</button>`}</div>
+      <div class="foot">${dl&&r.count?`<button class="payb" type="button" data-exb="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">匯出對帳單</button>`:""}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
     </div>`;
   }).join("");
 }
@@ -1207,10 +1217,10 @@ document.addEventListener("keydown",e=>{
   if((e.key==="Enter"||e.key===" ")&&e.target.matches&&e.target.matches(".card.tap,.scard .head")){ e.preventDefault(); e.target.click(); }
 });
 async function setPaid(brand, paid){
-  const mk=curMonth; const r=settleRows(mk).find(x=>x.brand===brand);
-  const d=new Date();
-  try{ await db.collection("settlements").doc(`${mk}_${brandKey(brand)}`).set({month:mk,brand,paid,payout:r?r.payout:0,paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()});
-    toast(paid?`${brand} 標記為已付`:"已改回未付"); }catch(e){ toast("儲存失敗："+errText(e)); }
+  // one payment covers the whole period, so both months are marked together
+  const d=new Date(); const pl=periodLabel(curMonth);
+  try{ await commitOps(periodPayout(curMonth,brand).map(({m,r})=>({ref:db.collection("settlements").doc(`${m}_${brandKey(brand)}`),replace:true,data:{month:m,brand,paid,payout:r?r.payout:0,period:periodOf(curMonth).join("~"),paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()}})));
+    toast(paid?`${brand} ${pl.range}標記為已付`:"已改回未付"); }catch(e){ toast("儲存失敗："+errText(e)); }
 }
 function exportBrand(brand){
   const r=settleRows(curMonth).find(x=>x.brand===brand); if(!r||!dl) return;
