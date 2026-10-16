@@ -154,7 +154,8 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .tile .row .q{font-family:var(--f-head);font-size:18px;font-weight:900;color:var(--ink);white-space:nowrap}
 .tile .row .q small{font-size:11px;color:var(--muted);font-family:var(--f-body);margin-left:1px;font-weight:500}
 .lst{display:flex;flex-direction:column;gap:8px}
-.vt.tabs{align-self:stretch;display:grid;grid-template-columns:1fr 1fr}
+.vt.tabs{align-self:stretch;display:grid;grid-auto-flow:column;grid-auto-columns:1fr}
+.vt.tabs button[hidden]{display:none}
 .vt.tabs button{font-size:15px;padding:9px}
 .mchips{display:flex;gap:8px;flex-wrap:wrap}
 .mchips button{border:1px solid var(--line);background:var(--surface);font:inherit;font-weight:700;font-size:14px;color:var(--muted);padding:6px 14px;border-radius:99px;cursor:pointer}
@@ -162,6 +163,12 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .day{display:flex;flex-direction:column;gap:6px}
 .day h3{margin:4px 0 0;font-family:var(--f-head);font-size:16px;display:flex;justify-content:space-between;align-items:baseline}
 .day h3 span{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:700}
+.sbox{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;flex-direction:column;gap:4px}
+.sbox>b{font-family:var(--f-head);font-size:15px;margin-bottom:2px}
+.ln{display:flex;justify-content:space-between;gap:10px;font-size:14px;color:var(--muted)}
+.ln.tot{color:var(--ink);font-weight:700;border-top:1px dashed var(--line);padding-top:5px;margin-top:2px}
+.ln.grand{color:var(--ink);font-size:15px;padding:4px 2px}.ln.grand b{font-size:19px;color:var(--accent)}
+.stl h3 .ok{color:var(--ok,#3a7d44)}.stl h3 .due{color:var(--accent)}
 .srow{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:10px;align-items:center}
 .srow .r{text-align:right;white-space:nowrap;display:flex;flex-direction:column}
 .srow .r b{font-size:16px}
@@ -175,7 +182,7 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 <header class="top"><img id="blogo" alt="" hidden style="width:48px;height:48px;border-radius:14px;object-fit:cover;background:#fff;flex:none"><div class="grow"><div class="kicker">旗時 · 永樂市場 2F 寄售</div><h1 id="bname">永樂寄售庫存</h1><div class="sub" id="upd">讀取中…</div></div><button class="rfb" type="button" id="refreshBtn" aria-label="重新整理" title="重新整理"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 12a8 8 0 1 1-2.34-5.66"/><path d="M20 4v4h-4"/></svg><span>重新整理</span></button></header>
 <main>
   <div class="screen">
-    <div class="vt tabs" id="tabs" role="tablist" hidden><button type="button" data-tab="stock">庫存</button><button type="button" data-tab="sales">售出紀錄</button></div>
+    <div class="vt tabs" id="tabs" role="tablist" hidden><button type="button" data-tab="stock">庫存</button><button type="button" data-tab="sales">售出紀錄</button><button type="button" data-tab="settle" id="tabSettle" hidden>結算</button></div>
     <div id="salesBox" hidden style="display:flex;flex-direction:column;gap:12px"></div>
     <div class="stats" id="stats" hidden>
       <div class="stat"><span class="k">在店商品</span><span class="v num" id="sKinds">0</span></div>
@@ -218,10 +225,21 @@ function renderSales(){
       :`<div class="empty"><b>${Number(smonth.slice(5))} 月還沒有售出紀錄</b></div>`}
     <p class="foot">只顯示最近 ${fmtN(months.length)} 個月；實際金額以月結對帳單為準。</p>`;
 }
+function renderSettleV(){
+  const ss=view.settle||[];
+  const per={}; ss.forEach(x=>{ (per[x.period+"|"+x.month.slice(0,4)]=per[x.period+"|"+x.month.slice(0,4)]||[]).push(x); });
+  $("#salesBox").innerHTML=ss.length?Object.values(per).map(g=>{ const tot=g.reduce((t,x)=>t+Number(x.net||0),0); const paid=g.every(x=>x.paid);
+    return `<section class="day stl"><h3>${g[0].month.slice(0,4)} 年 ${esc(g[0].period)}（${esc(g[0].due)}付款）<span class="${paid?"ok":"due"}">${paid?`已付${g[0].paidOn?" "+esc(g[0].paidOn):""}`:"未付"}</span></h3>
+      ${g.map(x=>`<div class="sbox"><b>${Number(x.month.slice(5))} 月${x.month===mk(Date.now())?"（本月還在累計）":""}${x.manual?"（依紙本結算）":`・售出 ${fmtN(x.count)} 件`}</b>
+        ${x.manual?"":`<div class="ln"><span>販售金額</span><span class="num">${money(x.amount)}</span></div><div class="ln"><span>抽成</span><span class="num">−${money(x.commission)}</span></div><div class="ln"><span>支付金額</span><span class="num">${money(x.payout)}</span></div>${x.lpFee?`<div class="ln"><span>LINE Pay 手續費（${money(x.lpAmt)} × 3%）</span><span class="num">−${money(x.lpFee)}</span></div>`:""}`}
+        <div class="ln tot"><span>轉帳金額</span><span class="num">${money(x.net)}</span></div></div>`).join("")}
+      <div class="ln grand"><span>${esc(g[0].period)}合計轉帳</span><b class="num">${money(tot)}</b></div></section>`; }).join("")+'<p class="foot">每月結算一次，兩個月付款一次。</p>'
+    :`<div class="empty"><b>最近還沒有結算資料</b></div>`;
+}
 function render(){
   document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tab===tab)));
   const st=tab==="stock"; $("#stats").hidden=$("#tools").hidden=$("#list").hidden=!st; $("#salesBox").hidden=st;
-  if(!st) return renderSales();
+  if(!st) return tab==="settle"?renderSettleV():renderSales();
   const its=view.items||[]; const inStock=its.filter(i=>Number(i.qty)>0);
   $("#sKinds").textContent=fmtN(inStock.length); $("#sQty").textContent=fmtN(inStock.reduce((s,i)=>s+Number(i.qty||0),0));
   $("#sVal").textContent=money(inStock.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0));
@@ -262,7 +280,7 @@ $("#q").oninput=()=>view&&render();
     if(!d.exists) return fail("這個連結已經失效");
     view=d.data(); document.title=`${view.brand} 寄售庫存`; $("#bname").textContent=`${view.brand}`; if(view.logo){ $("#blogo").src=view.logo; $("#blogo").hidden=false; }
     $("#upd").textContent="更新於 "+new Date(view.updatedAt||Date.now()).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
-    $("#tabs").hidden=!view.sales; if(!view.sales) tab="stock"; render();
+    $("#tabs").hidden=!view.sales; $("#tabSettle").hidden=!view.settle; if(!view.sales||(tab==="settle"&&!view.settle)) tab="stock"; render();
   }, ()=>fail("這個連結已經失效"));
 })();
 </script>
