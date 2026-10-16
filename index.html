@@ -375,6 +375,7 @@ const fmtN = n => (Math.round(Number(n||0)*100)/100).toLocaleString("zh-TW");
 const money = n => "$" + Math.round(Number(n||0)).toLocaleString("zh-TW");
 const pad = n => String(n).padStart(2,"0");
 const fmtT = ms => { const d=new Date(ms); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const fmtD = ms => { const d=new Date(ms); return `${d.getMonth()+1}/${d.getDate()}`; };
 const fmtHM = ms => { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const dayLabel = ms => { const d=new Date(ms), t=new Date(); t.setHours(0,0,0,0); const y=new Date(t); y.setDate(t.getDate()-1);
   if(d>=t) return "今天"; if(d>=y) return "昨天"; return `${d.getMonth()+1}月${d.getDate()}日 週${"日一二三四五六"[d.getDay()]}`; };
@@ -529,7 +530,10 @@ function settleRows(mk, all){
     r.count+=Number(m.qty||0); r.amount+=Number(m.amount||0); r.commission+=Number(m.commission||0); r.payout+=Number(m.payout||0); r.fee+=Number(m.fee||0); r.sales.push(m);
   });
   // like hsu's sheet: fee = 3% of the month's LINE Pay sales, rounded once on the total (10.5+16.5+16.5 = 43.5 → 44, transfer 1505 − 43.5 → 1462)
-  Object.values(by).forEach(r=>{ r.lpAmt=r.sales.filter(m=>m.pay==="linepay").reduce((t,m)=>t+Number(m.amount||0),0); const raw=LINEPAY_FROM_BRAND?r.lpAmt*LINEPAY_FEE/100:0; r.lpFee=Math.round(raw); r.net=Math.round(r.payout-raw); });
+  // a month recorded by hand (e.g. from an old paper statement) when no sales were entered
+  Object.values(settles).forEach(d=>{ if(d.month===mk&&d.manualNet!=null&&d.brand&&!by[d.brand]) by[d.brand]={brand:d.brand,count:0,amount:0,commission:0,payout:0,fee:0,sales:[]}; });
+  Object.values(by).forEach(r=>{ r.lpAmt=r.sales.filter(m=>m.pay==="linepay").reduce((t,m)=>t+Number(m.amount||0),0); const raw=LINEPAY_FROM_BRAND?r.lpAmt*LINEPAY_FEE/100:0; r.lpFee=Math.round(raw); r.net=Math.round(r.payout-raw);
+    const d=settles[`${mk}_${brandKey(r.brand)}`]; if(!r.sales.length&&d&&d.manualNet!=null){ r.manual=true; r.net=r.payout=Number(d.manualNet)||0; } });
   return Object.values(by).sort((a,b)=>a.brand.localeCompare(b.brand,"zh-Hant"));
 }
 
@@ -548,18 +552,18 @@ function renderSettle(){
   $("#settleList").innerHTML=rows.map(r=>{
     const s=settles[`${curMonth}_${brandKey(r.brand)}`]; const paid=s&&s.paid; const open=openBrand===r.brand;
     const pp=periodPayout(curMonth,r.brand); const pl=periodLabel(curMonth); const ptotal=pp.reduce((t,x)=>t+(x.r?x.r.net:0),0);
-    const pAny=pp.some(x=>x.r&&x.r.count); const pPaid=pp.every(x=>!(x.r&&x.r.count)||(settles[`${x.m}_${brandKey(r.brand)}`]||{}).paid);
+    const has=x=>x.r&&(x.r.count||x.r.manual); const pAny=pp.some(has); const pPaid=pp.every(x=>!has(x)||(settles[`${x.m}_${brandKey(r.brand)}`]||{}).paid);
     return `<div class="scard">
       <div class="head" data-brand="${esc(r.brand)}" role="button" tabindex="0" aria-expanded="${open}">
         ${avatar(r.brand)}
-        <div class="body"><span class="title">${esc(r.brand)}</span><span class="meta">${r.count?`售出 ${fmtN(r.count)} 件 ${paid?`<span class="tag ok">已付 ${esc(s.paidOn||"")}</span>`:'<span class="tag low">未付</span>'}`:"這個月沒有售出"}</span></div>
+        <div class="body"><span class="title">${esc(r.brand)}</span><span class="meta">${r.count||r.manual?`${r.manual?"手動記帳":`售出 ${fmtN(r.count)} 件`} ${paid?`<span class="tag ok">已付 ${esc(s.paidOn||"")}</span>`:'<span class="tag low">未付</span>'}`:"這個月沒有售出"}</span></div>
         <svg class="i" viewBox="0 0 24 24" style="transform:rotate(${open?90:0}deg)"><path d="m9 18 6-6-6-6"/></svg>
       </div>
       <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">本月付給店家<b class="num">${money(r.net)}</b></div></div>
       ${r.lpFee?`<div class="period">支付金額 ${money(r.payout)} − LINE Pay 手續費 ${money(r.lpFee)} ＝ 轉帳 <b class="num">${money(r.net)}</b></div>`:""}
       ${pAny?`<div class="period">付款期 ${pl.range}（${pl.due}付）：${pp.map(x=>`${Number(x.m.slice(5))} 月 ${money(x.r?x.r.net:0)}`).join(" ＋ ")} ＝ <b class="num">${money(ptotal)}</b>${pPaid?' <span class="tag ok">已付</span>':""}</div>`:""}
-      ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtT(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
-      <div class="foot">${r.count?`<button class="payb" type="button" data-stm="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">結算單</button>`:""}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
+      ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtD(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
+      <div class="foot">${r.count?`<button class="payb" type="button" data-stm="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">結算單</button>`:`<button class="payb" type="button" data-man="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">${r.manual?"修改金額":"手動輸入金額"}</button>`}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
     </div>`;
   }).join("");
 }
@@ -1231,6 +1235,7 @@ document.addEventListener("click",e=>{
   else if(el=g("data-unpay")){ setPaid(el.dataset.unpay,false); }
   else if(el=g("data-exb")){ exportBrand(el.dataset.exb); }
   else if(el=g("data-stm")){ statement(el.dataset.stm); }
+  else if(el=g("data-man")){ manualSettle(el.dataset.man); }
   else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
   else if(el=g("data-selon")){ selMode=true; sel.clear(); renderItems(); }
   else if(el=g("data-selx")){ selMode=false; sel.clear(); renderItems(); }
@@ -1252,8 +1257,22 @@ document.addEventListener("keydown",e=>{
 async function setPaid(brand, paid){
   // one payment covers the whole period, so both months are marked together
   const d=new Date(); const pl=periodLabel(curMonth);
-  try{ await commitOps(periodPayout(curMonth,brand).map(({m,r})=>({ref:db.collection("settlements").doc(`${m}_${brandKey(brand)}`),replace:true,data:{month:m,brand,paid,payout:r?r.net:0,period:periodOf(curMonth).join("~"),paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()}})));
+  try{ await commitOps(periodPayout(curMonth,brand).map(({m,r})=>({ref:db.collection("settlements").doc(`${m}_${brandKey(brand)}`),data:{month:m,brand,paid,payout:r?r.net:0,period:periodOf(curMonth).join("~"),paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()}})));
     toast(paid?`${brand} ${pl.range}標記為已付`:"已改回未付"); }catch(e){ toast("儲存失敗："+errText(e)); }
+}
+function manualSettle(brand){
+  const mk=curMonth; const id=`${mk}_${brandKey(brand)}`; const d=settles[id]||{}; const [y,mo]=mk.split("-").map(Number);
+  openModal(`<h2>${esc(brand)} ${y} 年 ${mo} 月</h2><p class="hint">這個月沒有在 App 裡記售出，可以直接填要轉給店家的金額（已扣抽成和 LINE Pay 手續費）。</p>
+    <label class="field">總轉帳金額<input id="mnV" type="number" inputmode="numeric" min="0" step="1" value="${d.manualNet??""}" placeholder="例如 1462"></label>
+    <label class="field">備註（選填）<input id="mnN" maxlength="100" value="${esc(d.manualNote||"")}" placeholder="例如：依紙本結算單"></label>
+    <p class="err" id="mnE" hidden></p>
+    <div class="acts">${d.manualNet!=null?'<button class="btn danger" type="button" id="mnDel">清除</button>':""}<button class="btn" type="button" id="mnNo">取消</button><button class="btn primary" type="button" id="mnOk">儲存</button></div>`, m=>{
+    m.querySelector("#mnNo").onclick=closeModal;
+    const save=async data=>{ try{ await db.collection("settlements").doc(id).set({month:mk,brand,...data,by:myId||"",at:Date.now()},{merge:true}); closeModal(); toast("已儲存"); }catch(e){ const p=m.querySelector("#mnE"); p.textContent="儲存失敗："+errText(e); p.hidden=false; } };
+    m.querySelector("#mnOk").onclick=()=>{ const v=m.querySelector("#mnV").value; if(v===""||Number(v)<0){ const p=m.querySelector("#mnE"); p.textContent="請填金額"; p.hidden=false; return; }
+      save({manualNet:Math.round(Number(v)),payout:Math.round(Number(v)),manualNote:m.querySelector("#mnN").value.trim()}); };
+    const del=m.querySelector("#mnDel"); if(del) del.onclick=()=>save({manualNet:null,manualNote:""});
+  });
 }
 function statement(brand){
   const mk=curMonth; const r=settleRows(mk).find(x=>x.brand===brand); if(!r) return;
