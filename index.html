@@ -636,7 +636,8 @@ function vendorSettle(b){
   const d=new Date(); const out=[];
   for(let k=0;k<VENDOR_SETTLE_MONTHS;k++){ const m=monthKey(new Date(d.getFullYear(),d.getMonth()-k,1).getTime()); const r=settleRows(m).find(x=>x.brand===b); if(!r||!(r.count||r.manual)) continue;
     const st=settles[`${m}_${brandKey(b)}`]||{}; const pl=periodLabel(m);
-    out.push({month:m,count:r.count,amount:r.amount,commission:r.commission,payout:r.payout,lpAmt:r.lpAmt||0,lpFee:r.lpFee||0,net:r.net,manual:!!r.manual,paid:!!st.paid,paidOn:st.paidOn||"",period:pl.range,due:pl.due}); }
+    out.push({month:m,count:r.count,amount:r.amount,commission:r.commission,payout:r.payout,lpAmt:r.lpAmt||0,lpFee:r.lpFee||0,net:r.net,manual:!!r.manual,paid:!!st.paid,paidOn:st.paidOn||"",period:pl.range,due:pl.due,
+      rows:r.sales.slice().sort((x,z)=>x.at-z.at).map(m=>({at:m.at,name:m.itemName||"",qty:Number(m.qty||0),amount:Number(m.amount||0),commission:Number(m.commission||0),payout:Number(m.payout||0),...(m.pay==="linepay"?{lp:1}:{})}))}); }
   return out;
 }
 function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout(syncVendorViews,1500); }
