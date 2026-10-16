@@ -256,6 +256,33 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .card.selc.on .ck{background:var(--accent);border-color:var(--accent)}
 .scard .period{font-size:13px;color:var(--muted);padding:10px 16px 0;border-top:1px dashed var(--line);margin-top:8px}
 .scard .period b{color:var(--ink);font-size:15px}
+#stmt{position:fixed;inset:0;z-index:50;background:#e9dfcd;overflow:auto;padding:0 12px 40px}
+body.stmt-open{overflow:hidden}
+.stbar{position:sticky;top:0;display:flex;gap:8px;align-items:center;padding:10px 0;background:#e9dfcd;z-index:1;max-width:820px;margin:0 auto}
+.stbar .btn{flex:0 0 auto;padding:10px 16px}
+.stdoc{max-width:820px;margin:0 auto;background:#fffaf1;color:#3b2a1f;border-radius:6px;padding:32px 28px;box-shadow:0 6px 24px rgba(90,62,43,.18);border-top:6px solid #a8322d;position:relative}
+.stdoc::after{content:"";position:absolute;inset:10px;border:1px solid #e3d5bf;border-radius:3px;pointer-events:none}
+.sthead{display:flex;gap:16px;align-items:center;border-bottom:2px solid #3b2a1f;padding-bottom:16px;margin-bottom:18px}
+.sthead img{width:72px;height:72px;object-fit:cover;border-radius:12px;border:1px solid #e3d5bf;background:#fff}
+.sthead h1{margin:2px 0;font-family:var(--f-head);font-size:30px;letter-spacing:.06em}
+.sthead p{margin:0;color:#86705e;font-size:14px}.sthead .ok{color:#3f7564}
+.stsum{display:grid;grid-template-columns:repeat(auto-fit,minmax(110px,1fr));gap:8px;margin-bottom:8px}
+.stsum div{background:#f3ebdd;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
+.stsum span{font-size:12px;color:#86705e;font-weight:700}.stsum b{font-family:var(--f-head);font-size:20px}
+.stsum .hl{background:#a8322d;color:#fffaf1}.stsum .hl span{color:#fffaf1;opacity:.85}
+.stdoc h2{font-family:var(--f-head);font-size:17px;margin:22px 0 8px;letter-spacing:.06em}.stdoc h2::before{content:"⟡ ";color:#a8322d}
+.stdoc table{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums}
+.stdoc th,.stdoc td{padding:9px 10px;border-bottom:1px solid #e3d5bf;text-align:right;white-space:nowrap}
+.stdoc .l{text-align:left;white-space:normal}
+.stdoc td:first-child,.stdoc thead th:first-child{text-align:left;width:56px}
+@media (max-width:520px){.stdoc{padding:22px 14px}.stdoc th,.stdoc td{padding:8px 6px;font-size:14px}.sthead h1{font-size:24px}}
+.stdoc thead th{background:#3b2a1f;color:#fffaf1;font-weight:700;font-size:13px;letter-spacing:.05em}
+.stdoc tbody tr:nth-child(even) td{background:#faf3e7}
+.stdoc tfoot td{font-weight:900;color:#a8322d;border-top:2px solid #3b2a1f;border-bottom:0}
+.stdoc .sttot{max-width:420px}.stdoc .sttot th{background:#f3ebdd;font-weight:700}
+.stdoc .sttot tr.hl th{background:#3b2a1f;color:#fffaf1}.stdoc .sttot tr.hl td{color:#a8322d;font-weight:900;font-size:18px}
+.stfoot{text-align:center;color:#86705e;font-size:12px;margin:26px 0 0}
+@media print{ body>*:not(#stmt){display:none!important} #stmt{position:static;background:#fff;padding:0;overflow:visible} .stbar{display:none} .stdoc{box-shadow:none;max-width:none;border-radius:0} @page{margin:12mm} *{-webkit-print-color-adjust:exact;print-color-adjust:exact} }
 </style>
 </head>
 <body>
@@ -368,6 +395,7 @@ const soldOff = b => { const d=brandDoc(b); return d&&d.soldOff!=null ? !!d.sold
 const offShelf = i => soldOff(i.brand) && Number(i.qty||0)<=0;
 function status(it){ const q=Number(it.qty||0), m=Number(it.min||0); if(q<=0) return "out"; if(m>0 && q<=m) return "low"; return ""; }
 function errText(e){ return e&&e.code==="not_granted" ? "你沒有編輯權限，請負責人把你加入。" : (e&&e.message)||String(e); }
+const LINEPAY_FROM_BRAND = true; // hsu's statements deduct the LINE Pay fee from the brand's transfer (1505 − 44 = 1462)
 const LINEPAY_FEE = 3; // % added on top of the price when the customer pays with LINE Pay; kept by the shop, not split with the brand
 function splitSale(amount, rate){ const commission=Math.round(amount*rate/100); return {commission, payout:amount-commission}; }
 const brands = () => [...new Set(items.map(i=>i.brand||"").concat(brandDocs.map(b=>b.name||"")).filter(Boolean))].sort((a,b)=>a.localeCompare(b,"zh-Hant"));
@@ -499,6 +527,8 @@ function settleRows(mk, all){
     const b=m.brand||"(未填品牌)"; const r=by[b] ||= {brand:b,count:0,amount:0,commission:0,payout:0,fee:0,sales:[]};
     r.count+=Number(m.qty||0); r.amount+=Number(m.amount||0); r.commission+=Number(m.commission||0); r.payout+=Number(m.payout||0); r.fee+=Number(m.fee||0); r.sales.push(m);
   });
+  // like hsu's sheet: fee = 3% of the month's LINE Pay sales, rounded once on the total (10.5+16.5+16.5 = 43.5 → 44, transfer 1505 − 43.5 → 1462)
+  Object.values(by).forEach(r=>{ r.lpAmt=r.sales.filter(m=>m.pay==="linepay").reduce((t,m)=>t+Number(m.amount||0),0); const raw=LINEPAY_FROM_BRAND?r.lpAmt*LINEPAY_FEE/100:0; r.lpFee=Math.round(raw); r.net=Math.round(r.payout-raw); });
   return Object.values(by).sort((a,b)=>a.brand.localeCompare(b.brand,"zh-Hant"));
 }
 
@@ -511,12 +541,12 @@ function renderSettle(){
   const [y,mo]=curMonth.split("-"); $("#mLabel").textContent=`${y} 年 ${Number(mo)} 月`;
   if(!db) return;
   const rows=settleRows(curMonth,true); const sum=k=>rows.reduce((s,r)=>s+r[k],0);
-  $("#hero").innerHTML=`<div><span>銷售額</span><b class="num">${money(sum("amount"))}</b></div><div><span>我們抽成</span><b class="num">${money(sum("commission"))}</b></div><div><span>付給店家</span><b class="num">${money(sum("payout"))}</b></div>${sum("fee")?`<div class="lpline">LINE Pay 手續費另收 ${money(sum("fee"))}（不分給店家）</div>`:""}`;
+  $("#hero").innerHTML=`<div><span>銷售額</span><b class="num">${money(sum("amount"))}</b></div><div><span>我們抽成</span><b class="num">${money(sum("commission"))}</b></div><div><span>付給店家</span><b class="num">${money(sum("net"))}</b></div>${sum("fee")?`<div class="lpline">${LINEPAY_FROM_BRAND?`已扣 LINE Pay 手續費 ${money(sum("lpFee"))}`:`LINE Pay 手續費另收 ${money(sum("fee"))}（不分給店家）`}</div>`:""}`;
   if(!rows.length){ $("#settleList").innerHTML='<div class="empty"><b>還沒有品牌</b>新增商品後，每個品牌每月要付多少會列在這裡。</div>'; return; }
   rows.sort((a,b)=>(b.count>0)-(a.count>0)||a.brand.localeCompare(b.brand,"zh-Hant"));
   $("#settleList").innerHTML=rows.map(r=>{
     const s=settles[`${curMonth}_${brandKey(r.brand)}`]; const paid=s&&s.paid; const open=openBrand===r.brand;
-    const pp=periodPayout(curMonth,r.brand); const pl=periodLabel(curMonth); const ptotal=pp.reduce((t,x)=>t+(x.r?x.r.payout:0),0);
+    const pp=periodPayout(curMonth,r.brand); const pl=periodLabel(curMonth); const ptotal=pp.reduce((t,x)=>t+(x.r?x.r.net:0),0);
     const pAny=pp.some(x=>x.r&&x.r.count); const pPaid=pp.every(x=>!(x.r&&x.r.count)||(settles[`${x.m}_${brandKey(r.brand)}`]||{}).paid);
     return `<div class="scard">
       <div class="head" data-brand="${esc(r.brand)}" role="button" tabindex="0" aria-expanded="${open}">
@@ -524,10 +554,11 @@ function renderSettle(){
         <div class="body"><span class="title">${esc(r.brand)}</span><span class="meta">${r.count?`售出 ${fmtN(r.count)} 件 ${paid?`<span class="tag ok">已付 ${esc(s.paidOn||"")}</span>`:'<span class="tag low">未付</span>'}`:"這個月沒有售出"}</span></div>
         <svg class="i" viewBox="0 0 24 24" style="transform:rotate(${open?90:0}deg)"><path d="m9 18 6-6-6-6"/></svg>
       </div>
-      <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">本月付給店家<b class="num">${money(r.payout)}</b></div></div>
-      ${pAny?`<div class="period">付款期 ${pl.range}（${pl.due}付）：${pp.map(x=>`${Number(x.m.slice(5))} 月 ${money(x.r?x.r.payout:0)}`).join(" ＋ ")} ＝ <b class="num">${money(ptotal)}</b>${pPaid?' <span class="tag ok">已付</span>':""}</div>`:""}
+      <div class="nums"><div>銷售額<b class="num">${money(r.amount)}</b></div><div>我們抽成<b class="num">${money(r.commission)}</b></div><div class="pay">本月付給店家<b class="num">${money(r.net)}</b></div></div>
+      ${r.lpFee?`<div class="period">支付金額 ${money(r.payout)} − LINE Pay 手續費 ${money(r.lpFee)} ＝ 轉帳 <b class="num">${money(r.net)}</b></div>`:""}
+      ${pAny?`<div class="period">付款期 ${pl.range}（${pl.due}付）：${pp.map(x=>`${Number(x.m.slice(5))} 月 ${money(x.r?x.r.net:0)}`).join(" ＋ ")} ＝ <b class="num">${money(ptotal)}</b>${pPaid?' <span class="tag ok">已付</span>':""}</div>`:""}
       ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtT(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
-      <div class="foot">${dl&&r.count?`<button class="payb" type="button" data-exb="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">匯出對帳單</button>`:""}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
+      <div class="foot">${r.count?`<button class="payb" type="button" data-stm="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">結算單</button>`:""}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
     </div>`;
   }).join("");
 }
@@ -590,7 +621,7 @@ const VENDOR_SALES_MONTHS=3, VENDOR_SHOW_PAYOUT=true;
 function vendorSales(b){
   const d=new Date(); const from=new Date(d.getFullYear(),d.getMonth()-(VENDOR_SALES_MONTHS-1),1).getTime();
   return moves.filter(m=>m.type==="sale"&&!m.void&&m.brand===b&&Number(m.at)>=from).sort((x,y)=>y.at-x.at)
-    .map(m=>({at:m.at,name:m.itemName||"",sku:m.sku||((items.find(i=>i.id===m.itemId)||{}).sku||""),qty:Number(m.qty||0),price:Number(m.price||0),amount:Number(m.amount||0),...(VENDOR_SHOW_PAYOUT?{payout:Number(m.payout||0)}:{})}));
+    .map(m=>({at:m.at,name:m.itemName||"",sku:m.sku||((items.find(i=>i.id===m.itemId)||{}).sku||""),qty:Number(m.qty||0),price:Number(m.price||0),amount:Number(m.amount||0),...(VENDOR_SHOW_PAYOUT?{payout:Number(m.payout||0)-(LINEPAY_FROM_BRAND&&m.pay==="linepay"?Math.round(Number(m.amount||0)*LINEPAY_FEE/100):0)}:{})}));
 }
 function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout(syncVendorViews,1500); }
 async function syncVendorViews(){
@@ -1198,6 +1229,7 @@ document.addEventListener("click",e=>{
   else if(el=g("data-pay")){ setPaid(el.dataset.pay,true); }
   else if(el=g("data-unpay")){ setPaid(el.dataset.unpay,false); }
   else if(el=g("data-exb")){ exportBrand(el.dataset.exb); }
+  else if(el=g("data-stm")){ statement(el.dataset.stm); }
   else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
   else if(el=g("data-selon")){ selMode=true; sel.clear(); renderItems(); }
   else if(el=g("data-selx")){ selMode=false; sel.clear(); renderItems(); }
@@ -1219,17 +1251,43 @@ document.addEventListener("keydown",e=>{
 async function setPaid(brand, paid){
   // one payment covers the whole period, so both months are marked together
   const d=new Date(); const pl=periodLabel(curMonth);
-  try{ await commitOps(periodPayout(curMonth,brand).map(({m,r})=>({ref:db.collection("settlements").doc(`${m}_${brandKey(brand)}`),replace:true,data:{month:m,brand,paid,payout:r?r.payout:0,period:periodOf(curMonth).join("~"),paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()}})));
+  try{ await commitOps(periodPayout(curMonth,brand).map(({m,r})=>({ref:db.collection("settlements").doc(`${m}_${brandKey(brand)}`),replace:true,data:{month:m,brand,paid,payout:r?r.net:0,period:periodOf(curMonth).join("~"),paidOn:paid?`${d.getMonth()+1}/${d.getDate()}`:"",by:myId||"",at:Date.now()}})));
     toast(paid?`${brand} ${pl.range}標記為已付`:"已改回未付"); }catch(e){ toast("儲存失敗："+errText(e)); }
+}
+function statement(brand){
+  const mk=curMonth; const r=settleRows(mk).find(x=>x.brand===brand); if(!r) return;
+  const [y,mo]=mk.split("-").map(Number); const sales=r.sales.slice().sort((a,b)=>a.at-b.at); const lp=sales.filter(m=>m.pay==="linepay"); const lf=m=>(Number(m.amount||0)*LINEPAY_FEE/100);
+  const md=t=>{ const d=new Date(t); return `${d.getMonth()+1}/${d.getDate()}`; };
+  const logo=brandImg(brand); const pl=periodLabel(mk); const s=settles[`${mk}_${brandKey(brand)}`];
+  const ov=document.createElement("div"); ov.id="stmt";
+  ov.innerHTML=`<div class="stbar"><button class="btn" type="button" data-stx>關閉</button><span class="grow"></span>${dl?'<button class="btn" type="button" data-stcsv>匯出 Excel</button>':""}<button class="btn primary" type="button" data-stp>列印／存成 PDF</button></div>
+  <article class="stdoc">
+    <header class="sthead">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(brand)}</h1><p>${y} 年 ${mo} 月 · 付款期 ${pl.range}（${pl.due}付）${s&&s.paid?` · <b class="ok">已付 ${esc(s.paidOn||"")}</b>`:""}</p></div></header>
+    <section class="stsum"><div><span>販售金額</span><b>${money(r.amount)}</b></div><div><span>抽成</span><b>${money(r.commission)}</b></div><div><span>支付金額</span><b>${money(r.payout)}</b></div>${LINEPAY_FROM_BRAND?`<div><span>LINE Pay</span><b>−${money(r.lpFee)}</b></div>`:""}<div class="hl"><span>總轉帳金額</span><b>${money(r.net)}</b></div></section>
+    <h2>${y}/${mo} 銷售明細</h2>
+    <table><thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售金額</th><th>抽成</th><th>支付金額</th></tr></thead><tbody>
+      ${sales.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</td><td>${fmtN(m.amount)}</td><td>${fmtN(m.commission)}</td><td>${fmtN(m.payout)}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(r.count)} 件）</td><td>${fmtN(r.amount)}</td><td>${fmtN(r.commission)}</td><td>${fmtN(r.payout)}</td></tr></tfoot></table>
+    ${LINEPAY_FROM_BRAND&&lp.length?`<h2>${y}/${mo} LINE Pay 費用</h2>
+    <table><thead><tr><th>日期</th><th class="l">消費項目</th><th>消費金額</th><th>手續費</th></tr></thead><tbody>
+      ${lp.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.itemName)}</td><td>${fmtN(m.amount)}</td><td>${fmtN(Math.round(lf(m)))}</td></tr>`).join("")}
+      </tbody><tfoot><tr><td></td><td class="l">合計</td><td>${fmtN(r.lpAmt)}</td><td>${fmtN(r.lpFee)}</td></tr></tfoot></table>`:""}
+    <h2>${y}/${mo} 總費用</h2>
+    <table class="sttot"><tbody><tr><th class="l">總費用</th><td>${fmtN(r.payout)}</td></tr>${LINEPAY_FROM_BRAND?`<tr><th class="l">LINE Pay</th><td>${fmtN(r.lpFee)}</td></tr>`:""}<tr class="hl"><th class="l">總轉帳金額</th><td>${fmtN(r.net)}</td></tr></tbody></table>
+    <p class="stfoot">✿ 旗時 Chipao Moments · 永樂市場 2F ✿　製表 ${new Date().toLocaleDateString("zh-TW")}</p>
+  </article>`;
+  document.body.appendChild(ov); document.body.classList.add("stmt-open");
+  ov.addEventListener("click",e=>{ if(e.target.closest("[data-stx]")){ ov.remove(); document.body.classList.remove("stmt-open"); }
+    else if(e.target.closest("[data-stp]")) window.print(); else if(e.target.closest("[data-stcsv]")) exportBrand(brand); });
 }
 function exportBrand(brand){
   const r=settleRows(curMonth).find(x=>x.brand===brand); if(!r||!dl) return;
   const [y,mo]=curMonth.split("-"); const s=settles[`${curMonth}_${brandKey(brand)}`];
   const a=[[`${brand} ${y}年${Number(mo)}月 寄售對帳單`].map(cell).join(","),"",
-    ["售出件數","銷售額","永樂抽成","應付店家","狀態"].map(cell).join(","),
-    [r.count,r.amount,r.commission,r.payout,s&&s.paid?`已付 ${s.paidOn||""}`:"未付"].map(cell).join(","),"",
-    ["日期","商品編號","商品","數量","單價","銷售額","永樂抽成","應付店家","備註"].map(cell).join(",")];
-  r.sales.slice().sort((x,z)=>x.at-z.at).forEach(m=>a.push([new Date(m.at).toLocaleDateString("zh-TW"),m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.note].map(cell).join(",")));
+    ["售出件數","銷售額","永樂抽成","支付金額","LINE Pay 手續費","總轉帳金額","狀態"].map(cell).join(","),
+    [r.count,r.amount,r.commission,r.payout,r.lpFee,r.net,s&&s.paid?`已付 ${s.paidOn||""}`:"未付"].map(cell).join(","),"",
+    ["日期","商品編號","商品","數量","單價","銷售額","永樂抽成","支付金額","LINE Pay 手續費","備註"].map(cell).join(",")];
+  r.sales.slice().sort((x,z)=>x.at-z.at).forEach(m=>a.push([new Date(m.at).toLocaleDateString("zh-TW"),m.sku,m.itemName,m.qty,m.price,m.amount,m.commission,m.payout,m.pay==="linepay"&&LINEPAY_FROM_BRAND?Math.round(Number(m.amount||0)*LINEPAY_FEE/100):0,m.note].map(cell).join(",")));
   saveCSV(`${brand}_對帳單_${curMonth}.csv`, a);
 }
 const TITLES={items:"商品",log:"紀錄",settle:"結算",more:"更多"};
