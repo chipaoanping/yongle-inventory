@@ -375,6 +375,7 @@ const fmtN = n => (Math.round(Number(n||0)*100)/100).toLocaleString("zh-TW");
 const money = n => "$" + Math.round(Number(n||0)).toLocaleString("zh-TW");
 const pad = n => String(n).padStart(2,"0");
 const fmtT = ms => { const d=new Date(ms); return `${d.getMonth()+1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}`; };
+const dayKey = ms => { const d=new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())}`; };
 const fmtD = ms => { const d=new Date(ms); return `${d.getMonth()+1}/${d.getDate()}`; };
 const fmtHM = ms => { const d=new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}`; };
 const dayLabel = ms => { const d=new Date(ms), t=new Date(); t.setHours(0,0,0,0); const y=new Date(t); y.setDate(t.getDate()-1);
@@ -887,7 +888,7 @@ function bumpVariant(cur, name, delta){ // cur = fresh item data; returns {varia
   if(!x){ x={name,qty:0}; vs.push(x); }
   x.qty=Number(x.qty||0)+delta; return {variants:vs, qty:varSum(vs), vqty:x.qty};
 }
-function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:Date.now()}); }
+function addMove(d){ const sku=d.sku ?? ((items.find(i=>i.id===d.itemId)||{}).sku||""); return db.collection("moves").add({...d, sku, by:myId||"", at:d.at||Date.now()}); }
 
 async function makeThumb(file, S=240){
   const url=URL.createObjectURL(file);
@@ -927,6 +928,7 @@ function sellForm(it){
         <label class="field">數量<input id="sQty" type="number" step="1" min="1" inputmode="numeric" value="1" required></label>
         <label class="field">單價（可改成折扣價）<input id="sPrice" type="number" step="1" min="0" inputmode="numeric" value="${esc(it.price)}" required></label>
       </div>
+      <label class="field">售出日期（補登以前的可以改）<input id="sDate" type="date" value="${dayKey(Date.now())}" max="${dayKey(Date.now())}" required></label>
       <label class="chk"><input type="checkbox" id="sLine">用 LINE Pay 結帳${LINEPAY_SURCHARGE?`（多收 ${LINEPAY_FEE}%）`:""}</label>
       <div class="lpbox" id="sLp" hidden>客人要付 <b id="sTotal">–</b><span>${LINEPAY_SURCHARGE?`（含 LINE Pay ${LINEPAY_FEE}% 手續費 <b id="sFee">–</b>）`:`（原價；${LINEPAY_FEE}% 手續費月結時從店家款項扣）`}</span></div>
       <div class="split" aria-live="polite">
@@ -934,7 +936,7 @@ function sellForm(it){
         <div>我們 ${fmtN(rate)}%<b id="sCom">–</b></div>
         <div>店家 ${fmtN(100-rate)}%<b id="sPay">–</b></div>
       </div>
-      <div class="field">照片${needsPhoto(it)?"（這個商品必須拍照）":"（選填）"}
+      <div class="field">照片${needsPhoto(it)?"（這個商品必須拍照；補登以前的可以不拍）":"（選填）"}
         <div class="photo-pick">
           <label class="btn" for="sCam">📷 拍照</label>
           <label class="btn" for="sFile" style="background:var(--surface-2);color:var(--ink)">從相簿選</label>
@@ -965,7 +967,10 @@ function sellForm(it){
       ev.preventDefault();
       const n=Number(m.querySelector("#sQty").value);
       if(!(n>0)) return err("請輸入數量。");
-      if(needsPhoto(it) && !photo) return err(`${it.brand}的商品售出要拍照，請先拍一張。`);
+      const dv=m.querySelector("#sDate").value, today=dayKey(Date.now());
+      if(!dv||dv>today) return err("請選售出日期（不能是未來）。");
+      const at=dv===today?Date.now():new Date(dv+"T12:00:00").getTime();
+      if(needsPhoto(it) && !photo && dv===today) return err(`${it.brand}的商品售出要拍照，請先拍一張。`);
       const btn=m.querySelector("#sSave"); btn.disabled=true;
       try{
         const ref=db.collection("items").doc(it.id);
@@ -979,7 +984,7 @@ function sellForm(it){
         let photoId="";
         if(photo){ const p=await db.collection("photos").add({data:photo,itemName:it.name,at:Date.now(),by:myId||""}); photoId=p.id; }
         await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,pay:payBy,fee,charged:amt+fee,photoId,after,note:m.querySelector("#sNote").value.trim()});
+        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,pay:payBy,fee,charged:amt+fee,photoId,after,note:m.querySelector("#sNote").value.trim()||(dv===today?"":"補登"),at});
         closeModal(); toast(payBy==="linepay"?`已售出，客人付 ${money(amt+fee)}（LINE Pay）`:`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
