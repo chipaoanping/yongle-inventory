@@ -247,6 +247,13 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .gatebox h1::after{content:"✿ 寄售庫存 ✿";display:block;font-family:var(--f-body);font-size:13px;letter-spacing:.2em;color:var(--accent);margin-top:4px;font-weight:700}
 .rfb{display:flex;align-items:center;gap:5px;border:1px solid var(--line);background:var(--surface);color:var(--ink);font:inherit;font-size:13px;font-weight:700;padding:7px 11px;border-radius:99px;cursor:pointer;flex:none}
 .rfb.spin svg{animation:rfs .8s linear infinite}@keyframes rfs{to{transform:rotate(360deg)}}
+.selbar{display:flex;align-items:center;gap:8px;flex-wrap:wrap;justify-content:flex-end;font-size:14px}
+.selbar.on{position:sticky;top:64px;z-index:4;background:var(--surface);border:1px solid var(--line);border-radius:14px;padding:8px 10px;box-shadow:var(--shadow);justify-content:space-between}
+.selbar .mini.danger{background:var(--bad);color:#fff;border-color:var(--bad)}
+.card.selc{cursor:pointer}
+.card.selc .ck{width:24px;height:24px;border-radius:7px;border:2px solid var(--line);flex:none;display:grid;place-items:center;font-weight:900;color:#fff}
+.card.selc.on{outline:2px solid var(--accent);outline-offset:-2px}
+.card.selc.on .ck{background:var(--accent);border-color:var(--accent)}
 </style>
 </head>
 <body>
@@ -267,6 +274,7 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
     <label class="search"><svg class="i" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg><input id="q" type="search" placeholder="搜尋商品、編號或品牌" aria-label="搜尋商品"></label>
     <div class="chips" id="brandChips" role="group" aria-label="品牌"></div>
     <div class="chips" id="catChips" role="group" aria-label="分類" hidden></div>
+    <div class="selbar" id="selBar"></div>
     <div class="cards" id="list"><div class="empty">正在載入商品…</div></div>
   </section>
 
@@ -350,7 +358,7 @@ const TICON = {sale:SVG('<path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><c
   in:SVG('<path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16"/>'), return:SVG('<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'), adjust:SVG('<path d="M4 20h4L19 9l-4-4L4 16z"/>')};
 
 let db=null, user=null, dl=null, myId=null;
-let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, showOff=false, openBrand=null, brandFilter="", catFilter="", typeFilter="", curMonth=monthKey(Date.now()), curTab="items";
+let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, showOff=false, selMode=false, sel=new Set(), openBrand=null, brandFilter="", catFilter="", typeFilter="", curMonth=monthKey(Date.now()), curTab="items";
 
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
 // brands of one-of-a-kind pieces (木子花花 by default) take an item off the list once it has sold out
@@ -428,11 +436,32 @@ function renderItems(){
   const q=$("#q").value.trim().toLowerCase();
   const rows=items.filter(i=>(showOff?offShelf(i):!offShelf(i)||!!q)&&(!brandFilter||i.brand===brandFilter)&&(!catFilter||i.category===catFilter)&&(!lowOnly||status(i))&&(!q||[i.name,i.sku,i.brand,i.category,i.note].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||(status(x)?0:1)-(status(y)?0:1)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+  [...sel].forEach(id=>{ if(!items.some(i=>i.id===id)) sel.delete(id); });
+  const bar=$("#selBar"); bar.className="selbar"+(selMode?" on":"");
+  bar.innerHTML=selMode?`<b>已選 ${fmtN(sel.size)} 項</b><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="mini" type="button" data-selall>${rows.every(i=>sel.has(i.id))?"取消全選":"全選這些"}（${fmtN(rows.length)}）</button><button class="mini danger" type="button" data-seldel ${sel.size?"":"disabled"}>刪除</button><button class="mini" type="button" data-selx>完成</button></span>`
+    :`<button class="mini" type="button" data-selon>選取多項</button>`;
+  bar._rows=rows.map(i=>i.id);
   const list=$("#list");
   if(!items.length){ list.innerHTML='<div class="empty"><b>還沒有商品</b>到「更多」新增商品，或匯入 Google 試算表的 CSV。</div>'; return; }
   if(showOff) list.innerHTML=`<p class="hint" style="margin:0 0 4px">已售出下架的商品，入庫或作廢售出後會自動回到清單。</p>`;
   if(!rows.length){ list.innerHTML=`<div class="empty"><b>找不到商品</b>${lowOnly?"目前沒有低庫存的商品。":"換個關鍵字試試看。"}</div>`; return; }
-  list.innerHTML=(showOff?list.innerHTML:"")+rows.map(i=>itemCard(i,false)).join("");
+  list.innerHTML=(showOff?list.innerHTML:"")+rows.map(i=>selMode?selCard(i):itemCard(i,false)).join("");
+}
+function selCard(i){
+  return `<div class="card selc${sel.has(i.id)?" on":""}" tabindex="0" role="checkbox" aria-checked="${sel.has(i.id)}" data-sel="${esc(i.id)}"><span class="ck">${sel.has(i.id)?"✓":""}</span>${avatar(i.brand,i.name,i.category,i.image)}<div class="body"><span class="title">${esc(i.name)}</span><span class="meta">${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}<span class="num">${money(i.price)}</span><span>${esc(i.brand||"")}${i.category?" · "+esc(i.category):""}</span></span></div><div class="right"><span class="qty num">${fmtN(i.qty)}<small>${esc(i.unit||"件")}</small></span></div></div>`;
+}
+function bulkDelete(){
+  const its=items.filter(i=>sel.has(i.id)); if(!its.length) return;
+  openModal(`<h2>刪除 ${fmtN(its.length)} 個商品？</h2>
+    <p>${its.slice(0,8).map(i=>esc(i.name)).join("、")}${its.length>8?` 等 ${fmtN(its.length)} 項`:""}</p>
+    <p class="hint">刪除後商品會從清單和廠商頁面消失，不能復原。過去的售出、入庫紀錄和結算會保留。</p>
+    <p class="err" id="bdErr" hidden></p>
+    <div class="acts"><button class="btn" type="button" id="bdNo">取消</button><button class="btn danger" type="button" id="bdGo">確定刪除 ${fmtN(its.length)} 項</button></div>`, m=>{
+    m.querySelector("#bdNo").onclick=closeModal;
+    m.querySelector("#bdGo").onclick=async()=>{ const b=m.querySelector("#bdGo"); b.disabled=true; b.textContent="刪除中…";
+      try{ await commitOps(its.map(i=>({ref:db.collection("items").doc(i.id),del:true}))); sel.clear(); selMode=false; closeModal(); toast(`已刪除 ${its.length} 個商品`); renderItems(); }
+      catch(e){ b.disabled=false; b.textContent=`確定刪除 ${its.length} 項`; const p=m.querySelector("#bdErr"); p.textContent="刪除失敗："+errText(e); p.hidden=false; } };
+  });
 }
 
 function renderLog(){
@@ -1160,6 +1189,11 @@ document.addEventListener("click",e=>{
   else if(el=g("data-unpay")){ setPaid(el.dataset.unpay,false); }
   else if(el=g("data-exb")){ exportBrand(el.dataset.exb); }
   else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
+  else if(el=g("data-selon")){ selMode=true; sel.clear(); renderItems(); }
+  else if(el=g("data-selx")){ selMode=false; sel.clear(); renderItems(); }
+  else if(el=g("data-selall")){ const ids=$("#selBar")._rows||[]; const all=ids.every(id=>sel.has(id)); ids.forEach(id=>all?sel.delete(id):sel.add(id)); renderItems(); }
+  else if(el=g("data-seldel")){ bulkDelete(); }
+  else if(el=g("data-sel")){ const id=el.dataset.sel; sel.has(id)?sel.delete(id):sel.add(id); renderItems(); }
   else if(el=g("data-act")){ const it=items.find(i=>i.id===el.dataset.act); it&&actionSheet(it); }
   else if(el=g("data-brand")){ openBrand=openBrand===el.dataset.brand?null:el.dataset.brand; renderSettle(); }
   else if(el=g("data-bf")){ brandFilter=el.dataset.bf; catFilter=""; showOff=false; renderItems(); }
