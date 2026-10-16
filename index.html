@@ -641,7 +641,7 @@ function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout
 async function syncVendorViews(){
   if(!db||!itemsFresh) return;
   for(const d of brandDocs){ if(!d.viewToken||!d.name) continue;
-    const sales=movesFresh?vendorSales(d.name):null; const settle=movesFresh&&settlesFresh?vendorSettle(d.name):null;
+    let sales=null; try{ sales=movesFresh?vendorSales(d.name):null; }catch(e){} let settle=null; try{ settle=movesFresh&&settlesFresh?vendorSettle(d.name):null; }catch(e){}
     const json=vendorPayload(d.name)+items.filter(i=>i.brand===d.name).map(i=>(i.image||"").length).join(",")+(sales?JSON.stringify(sales):"")+(settle?JSON.stringify(settle):""); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
     if(vendorSent[key]===json) continue;
     try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:await vendorItems(d.name),...(sales?{sales,salesFrom:VENDOR_SALES_MONTHS}:{}),...(settle?{settle}:{}),updatedAt:Date.now()},{merge:true}); vendorSent[key]=json; }catch(e){}
