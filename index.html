@@ -536,14 +536,21 @@ async function vendorItems(b){
 }
 const vendorPayload = b => JSON.stringify(items.filter(i=>i.brand===b).map(i=>({sku:i.sku||"",name:i.name||"",category:i.category||"",price:Number(i.price||0),qty:Number(i.qty||0),unit:i.unit||"件",...(hasVar(i)?{variants:i.variants.map(v=>({name:v.name,qty:Number(v.qty||0)}))}:{})}))
   .sort((x,y)=>String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true})));
-let vendorTimer=null, itemsFresh=false;
+let vendorTimer=null, itemsFresh=false, movesFresh=false;
+const VENDOR_SALES_MONTHS=3, VENDOR_SHOW_PAYOUT=true;
+function vendorSales(b){
+  const d=new Date(); const from=new Date(d.getFullYear(),d.getMonth()-(VENDOR_SALES_MONTHS-1),1).getTime();
+  return moves.filter(m=>m.type==="sale"&&!m.void&&m.brand===b&&Number(m.at)>=from).sort((x,y)=>y.at-x.at)
+    .map(m=>({at:m.at,name:m.itemName||"",sku:m.sku||((items.find(i=>i.id===m.itemId)||{}).sku||""),qty:Number(m.qty||0),price:Number(m.price||0),amount:Number(m.amount||0),...(VENDOR_SHOW_PAYOUT?{payout:Number(m.payout||0)}:{})}));
+}
 function scheduleVendorSync(){ clearTimeout(vendorTimer); vendorTimer=setTimeout(syncVendorViews,1500); }
 async function syncVendorViews(){
   if(!db||!itemsFresh) return;
   for(const d of brandDocs){ if(!d.viewToken||!d.name) continue;
-    const json=vendorPayload(d.name)+items.filter(i=>i.brand===d.name).map(i=>(i.image||"").length).join(","); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
+    const sales=movesFresh?vendorSales(d.name):null;
+    const json=vendorPayload(d.name)+items.filter(i=>i.brand===d.name).map(i=>(i.image||"").length).join(",")+(sales?JSON.stringify(sales):""); const key=d.viewToken+"|"+d.name+"|"+brandImg(d.name).length;
     if(vendorSent[key]===json) continue;
-    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:await vendorItems(d.name),updatedAt:Date.now()}); vendorSent[key]=json; }catch(e){}
+    try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:await vendorItems(d.name),...(sales?{sales,salesFrom:VENDOR_SALES_MONTHS}:{}),updatedAt:Date.now()},{merge:true}); vendorSent[key]=json; }catch(e){}
   }
 }
 const vendorUrl = t => new URL("vendor.html?t="+t, location.href).href;
@@ -553,7 +560,7 @@ function vendorBox(name){
   return d.viewToken
     ? `<input readonly value="${esc(vendorUrl(d.viewToken))}" aria-label="廠商連結" onclick="this.select()">
        <div class="acts"><button class="btn primary" type="button" data-vl="copy">${navigator.share?"分享連結":"複製連結"}</button><button class="btn" type="button" data-vl="renew">換新連結</button><button class="btn danger" type="button" data-vl="off">關閉</button></div>
-       <p class="hint">廠商打開這個連結，只看得到「${esc(name)}」的商品、編號、售價和剩幾件，看不到售出紀錄、金額和照片。換新連結後，舊連結就打不開了。</p>`
+       <p class="hint">廠商打開這個連結，只看得到「${esc(name)}」的商品、照片、剩幾件，和最近 ${VENDOR_SALES_MONTHS} 個月哪天賣了什麼${VENDOR_SHOW_PAYOUT?"（含店家可分得金額）":""}。看不到其他品牌、店員和 LINE Pay 手續費。換新連結後，舊連結就打不開了。</p>`
     : `<button class="btn" type="button" data-vl="make">建立廠商看庫存的連結</button>
        <p class="hint">建立後把連結傳給廠商，他們不用註冊就能看自己品牌的庫存。</p>`;
 }
@@ -1268,7 +1275,7 @@ function subscribe(){
   ok(); window.addEventListener("online",ok); window.addEventListener("offline",ok);
   unsubs.push(db.collection("items").onSnapshot(s=>{ items=s.docs.map(d=>({id:d.id,...d.data()})); itemsFresh=!(s.metadata&&s.metadata.fromCache); renderSummary(); renderItems(); renderMore(); scheduleVendorSync(); },
     e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
-  unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
+  unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); movesFresh=!(s.metadata&&s.metadata.fromCache); scheduleVendorSync(); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); scheduleVendorSync(); }, ()=>{}));
   unsubs.push(db.collection("settlements").onSnapshot(s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));

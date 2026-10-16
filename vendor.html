@@ -154,12 +154,27 @@ body{background-color:var(--bg);background-image:radial-gradient(rgba(90,62,43,.
 .tile .row .q{font-family:var(--f-head);font-size:18px;font-weight:900;color:var(--ink);white-space:nowrap}
 .tile .row .q small{font-size:11px;color:var(--muted);font-family:var(--f-body);margin-left:1px;font-weight:500}
 .lst{display:flex;flex-direction:column;gap:8px}
+.vt.tabs{align-self:stretch;display:grid;grid-template-columns:1fr 1fr}
+.vt.tabs button{font-size:15px;padding:9px}
+.mchips{display:flex;gap:8px;flex-wrap:wrap}
+.mchips button{border:1px solid var(--line);background:var(--surface);font:inherit;font-weight:700;font-size:14px;color:var(--muted);padding:6px 14px;border-radius:99px;cursor:pointer}
+.mchips button[aria-pressed="true"]{background:var(--ink);color:var(--bg);border-color:var(--ink)}
+.day{display:flex;flex-direction:column;gap:6px}
+.day h3{margin:4px 0 0;font-family:var(--f-head);font-size:16px;display:flex;justify-content:space-between;align-items:baseline}
+.day h3 span{font-family:var(--f-body);font-size:13px;color:var(--muted);font-weight:700}
+.srow{background:var(--surface);border:1px solid var(--line);border-radius:12px;padding:10px 12px;display:flex;justify-content:space-between;gap:10px;align-items:center}
+.srow .r{text-align:right;white-space:nowrap;display:flex;flex-direction:column}
+.srow .r b{font-size:16px}
+.srow .r small{font-size:12px;color:var(--good);font-weight:700}
+#stats[hidden],#tools[hidden],#salesBox[hidden],#list[hidden]{display:none!important}
 </style>
 </head>
 <body>
 <header class="top"><img id="blogo" alt="" hidden style="width:48px;height:48px;border-radius:14px;object-fit:cover;background:#fff;flex:none"><div class="grow"><div class="kicker">旗時 · 永樂市場 2F 寄售</div><h1 id="bname">永樂寄售庫存</h1><div class="sub" id="upd">讀取中…</div></div></header>
 <main>
   <div class="screen">
+    <div class="vt tabs" id="tabs" role="tablist" hidden><button type="button" data-tab="stock">庫存</button><button type="button" data-tab="sales">售出紀錄</button></div>
+    <div id="salesBox" hidden style="display:flex;flex-direction:column;gap:12px"></div>
     <div class="stats" id="stats" hidden>
       <div class="stat"><span class="k">在店商品</span><span class="v num" id="sKinds">0</span></div>
       <div class="stat"><span class="k">總件數</span><span class="v num" id="sQty">0</span></div>
@@ -183,9 +198,28 @@ const $=s=>document.querySelector(s);
 const esc=s=>String(s??"").replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"})[c]);
 const money=n=>"$"+Math.round(Number(n||0)).toLocaleString("en-US");
 const fmtN=n=>Number(n||0).toLocaleString("en-US");
-let view=null, cat="", mode="grid"; try{ mode=localStorage.getItem("vendorMode")==="list"?"list":"grid"; }catch(e){}
+let view=null, cat="", tab="stock", smonth="", mode="grid"; try{ mode=localStorage.getItem("vendorMode")==="list"?"list":"grid"; }catch(e){}
 function fail(t){ $("#upd").textContent=""; $("#list").innerHTML=`<div class="empty"><b>${esc(t)}</b>請向永樂索取最新的連結。</div>`; }
+const mk=t=>{ const d=new Date(t); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); };
+const WD="日一二三四五六";
+function renderSales(){
+  const ss=view.sales||[]; const showPay=ss.some(x=>x.payout!=null);
+  const now=new Date(); const months=[]; for(let k=0;k<Number(view.salesFrom||3);k++){ const d=new Date(now.getFullYear(),now.getMonth()-k,1); months.push(mk(d)); }
+  if(!months.includes(smonth)) smonth=months[0];
+  const list=ss.filter(x=>mk(x.at)===smonth);
+  const sum=(f)=>list.reduce((t,x)=>t+Number(x[f]||0),0);
+  const days=[]; list.forEach(x=>{ const d=new Date(x.at); const k=d.toDateString(); let g=days.find(y=>y.k===k); if(!g) days.push(g={k,d,list:[]}); g.list.push(x); });
+  $("#salesBox").innerHTML=`<div class="mchips">${months.map(m=>`<button type="button" data-sm="${m}" aria-pressed="${m===smonth}">${Number(m.slice(5))} 月</button>`).join("")}</div>
+    <div class="stats"><div class="stat"><span class="k">售出件數</span><span class="v num">${fmtN(sum("qty"))}</span></div><div class="stat"><span class="k">售出金額</span><span class="v num">${money(sum("amount"))}</span></div>${showPay?`<div class="stat money"><span class="k">店家可分得</span><span class="v num">${money(sum("payout"))}</span></div>`:""}</div>
+    ${days.length?days.map(g=>`<section class="day"><h3>${g.d.getMonth()+1}/${g.d.getDate()}（${WD[g.d.getDay()]}）<span>${fmtN(g.list.reduce((t,x)=>t+x.qty,0))} 件 · ${money(g.list.reduce((t,x)=>t+x.amount,0))}</span></h3>
+      ${g.list.map(x=>`<div class="srow"><div class="body"><span class="title">${esc(x.name)}</span><span class="meta">${x.sku?`<span class="tag">#${esc(x.sku)}</span>`:""}<span>${new Date(x.at).toLocaleTimeString("zh-TW",{hour:"2-digit",minute:"2-digit"})}</span>${x.qty>1?`<span>×${fmtN(x.qty)}</span>`:""}</span></div><div class="r"><b class="num">${money(x.amount)}</b>${x.payout!=null?`<small>可分得 ${money(x.payout)}</small>`:""}</div></div>`).join("")}</section>`).join("")
+      :`<div class="empty"><b>${Number(smonth.slice(5))} 月還沒有售出紀錄</b></div>`}
+    <p class="foot">只顯示最近 ${fmtN(months.length)} 個月；實際金額以月結對帳單為準。</p>`;
+}
 function render(){
+  document.querySelectorAll("[data-tab]").forEach(b=>b.setAttribute("aria-pressed",String(b.dataset.tab===tab)));
+  const st=tab==="stock"; $("#stats").hidden=$("#tools").hidden=$("#list").hidden=!st; $("#salesBox").hidden=st;
+  if(!st) return renderSales();
   const its=view.items||[]; const inStock=its.filter(i=>Number(i.qty)>0);
   $("#sKinds").textContent=fmtN(inStock.length); $("#sQty").textContent=fmtN(inStock.reduce((s,i)=>s+Number(i.qty||0),0));
   $("#sVal").textContent=money(inStock.reduce((s,i)=>s+Number(i.qty||0)*Number(i.price||0),0));
@@ -212,6 +246,8 @@ function render(){
 }
 document.addEventListener("click",e=>{ const z=e.target.closest(".zoom"); if(z){ z.remove(); return; }
   const im=e.target.closest("[data-big]"); if(im){ const d=document.createElement("div"); d.className="zoom"; d.innerHTML=`<img src="${im.dataset.big}" alt="">`; document.body.appendChild(d); return; }
+  const tb=e.target.closest("[data-tab]"); if(tb){ tab=tb.dataset.tab; view&&render(); return; }
+  const sm=e.target.closest("[data-sm]"); if(sm){ smonth=sm.dataset.sm; view&&render(); return; }
   const vm=e.target.closest("[data-vm]"); if(vm){ mode=vm.dataset.vm; try{ localStorage.setItem("vendorMode",mode); }catch(e){} view&&render(); return; }
   const b=e.target.closest("[data-cf]"); if(b){ cat=b.dataset.cf; render(); } });
 $("#q").oninput=()=>view&&render();
@@ -224,7 +260,7 @@ $("#q").oninput=()=>view&&render();
     if(!d.exists) return fail("這個連結已經失效");
     view=d.data(); document.title=`${view.brand} 寄售庫存`; $("#bname").textContent=`${view.brand}`; if(view.logo){ $("#blogo").src=view.logo; $("#blogo").hidden=false; }
     $("#upd").textContent="更新於 "+new Date(view.updatedAt||Date.now()).toLocaleString("zh-TW",{month:"numeric",day:"numeric",hour:"2-digit",minute:"2-digit"});
-    $("#stats").hidden=false; $("#tools").hidden=false; render();
+    $("#tabs").hidden=!view.sales; if(!view.sales) tab="stock"; render();
   }, ()=>fail("這個連結已經失效"));
 })();
 </script>
