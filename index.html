@@ -347,9 +347,12 @@ const TICON = {sale:SVG('<path d="M6 6h15l-1.5 9h-12z"/><path d="M6 6 5 3H2"/><c
   in:SVG('<path d="M12 4v12m0 0-5-5m5 5 5-5M4 20h16"/>'), return:SVG('<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>'), adjust:SVG('<path d="M4 20h4L19 9l-4-4L4 16z"/>')};
 
 let db=null, user=null, dl=null, myId=null;
-let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, openBrand=null, brandFilter="", catFilter="", typeFilter="", curMonth=monthKey(Date.now()), curTab="items";
+let brandDocs=[], items=[], moves=[], settles={}, names={}, lowOnly=false, showOff=false, openBrand=null, brandFilter="", catFilter="", typeFilter="", curMonth=monthKey(Date.now()), curTab="items";
 
 function toast(msg){ const t=$("#toast"); t.textContent=msg; t.hidden=false; clearTimeout(toast._t); toast._t=setTimeout(()=>t.hidden=true,2600); }
+// brands of one-of-a-kind pieces (木子花花 by default) take an item off the list once it has sold out
+const soldOff = b => { const d=brandDoc(b); return d&&d.soldOff!=null ? !!d.soldOff : b==="木子花花"; };
+const offShelf = i => soldOff(i.brand) && Number(i.qty||0)<=0;
 function status(it){ const q=Number(it.qty||0), m=Number(it.min||0); if(q<=0) return "out"; if(m>0 && q<=m) return "low"; return ""; }
 function errText(e){ return e&&e.code==="not_granted" ? "你沒有編輯權限，請負責人把你加入。" : (e&&e.message)||String(e); }
 const LINEPAY_FEE = 3; // % added on top of the price when the customer pays with LINE Pay; kept by the shop, not split with the brand
@@ -376,7 +379,7 @@ const who = id => !id ? "" : (names[id] || (id===myId ? "我" : "店員"));
 function renderAll(){ renderSummary(); renderItems(); renderLog(); renderSettle(); renderMore(); }
 
 function renderSummary(){
-  const low=items.filter(status).length;
+  const low=items.filter(i=>!offShelf(i)&&status(i)).length;
   $("#sLow").textContent=low; $("#sLowBtn").setAttribute("aria-pressed",lowOnly);
   const start=new Date(); start.setHours(0,0,0,0);
   $("#sToday").textContent=money(liveSales().filter(m=>m.at>=start.getTime()).reduce((s,m)=>s+Number(m.amount||0),0));
@@ -393,7 +396,7 @@ function itemCard(i, pick){
       <span class="meta">
         ${i.sku?`<span class="tag">#${esc(i.sku)}</span>`:""}
         <span class="num">${money(i.price)}</span>
-        ${s==="out"?'<span class="tag out">缺貨</span>':s==="low"?'<span class="tag low">低庫存</span>':""}
+        ${offShelf(i)?'<span class="tag">已下架</span>':s==="out"?'<span class="tag out">缺貨</span>':s==="low"?'<span class="tag low">低庫存</span>':""}
         ${needsPhoto(i)?'<span class="tag cam">需拍照</span>':""}
       </span>
       ${hasVar(i)?`<span class="meta">${i.variants.map(v=>`<span class="tag${Number(v.qty)>0?"":" out"}">${esc(v.name)} ×${fmtN(v.qty)}</span>`).join("")}</span>`:""}
@@ -409,20 +412,24 @@ function itemCard(i, pick){
 function renderItems(){
   const bl=brands();
   if(brandFilter && !bl.includes(brandFilter)) brandFilter="";
-  $("#brandChips").innerHTML=[`<button class="chip" type="button" data-bf="" aria-pressed="${!brandFilter}">全部 ${items.length}</button>`]
-    .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${brandImg(b)?`<img class="ci" src="${esc(brandImg(b))}" alt="">`:""}${esc(b)} ${items.filter(i=>i.brand===b).length}</button>`)).join("");
+  const on=items.filter(i=>!offShelf(i)); const off=items.filter(i=>offShelf(i)&&(!brandFilter||i.brand===brandFilter));
+  if(!off.length) showOff=false;
+  $("#brandChips").innerHTML=[`<button class="chip" type="button" data-bf="" aria-pressed="${!brandFilter}">全部 ${on.length}</button>`]
+    .concat(bl.map(b=>`<button class="chip" type="button" data-bf="${esc(b)}" aria-pressed="${brandFilter===b}">${brandImg(b)?`<img class="ci" src="${esc(brandImg(b))}" alt="">`:""}${esc(b)} ${on.filter(i=>i.brand===b).length}</button>`))
+    .concat(off.length?[`<button class="chip" type="button" data-off aria-pressed="${showOff}">已下架 ${off.length}</button>`]:[]).join("");
   const cats=brandFilter?catsOf(brandFilter):[];
   if(catFilter && !cats.includes(catFilter)) catFilter="";
   const cc=$("#catChips"); cc.hidden=!brandFilter||!cats.length;
-  cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${((brandDoc(brandFilter)||{}).catImages||{})[c]?`<img class="ci" src="${esc(brandDoc(brandFilter).catImages[c])}" alt="">`:""}${esc(c)} ${items.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
+  cc.innerHTML=[`<button class="chip" type="button" data-cf="" aria-pressed="${!catFilter}">全部分類</button>`].concat(cats.map(c=>`<button class="chip" type="button" data-cf="${esc(c)}" aria-pressed="${catFilter===c}">${((brandDoc(brandFilter)||{}).catImages||{})[c]?`<img class="ci" src="${esc(brandDoc(brandFilter).catImages[c])}" alt="">`:""}${esc(c)} ${on.filter(i=>i.brand===brandFilter&&i.category===c).length}</button>`)).join("");
   if(!db) return;
   const q=$("#q").value.trim().toLowerCase();
-  const rows=items.filter(i=>(!brandFilter||i.brand===brandFilter)&&(!catFilter||i.category===catFilter)&&(!lowOnly||status(i))&&(!q||[i.name,i.sku,i.brand,i.category,i.note].join(" ").toLowerCase().includes(q)))
+  const rows=items.filter(i=>(showOff?offShelf(i):!offShelf(i)||!!q)&&(!brandFilter||i.brand===brandFilter)&&(!catFilter||i.category===catFilter)&&(!lowOnly||status(i))&&(!q||[i.name,i.sku,i.brand,i.category,i.note].join(" ").toLowerCase().includes(q)))
     .sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||(status(x)?0:1)-(status(y)?0:1)||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
   const list=$("#list");
   if(!items.length){ list.innerHTML='<div class="empty"><b>還沒有商品</b>到「更多」新增商品，或匯入 Google 試算表的 CSV。</div>'; return; }
+  if(showOff) list.innerHTML=`<p class="hint" style="margin:0 0 4px">已售出下架的商品，入庫或作廢售出後會自動回到清單。</p>`;
   if(!rows.length){ list.innerHTML=`<div class="empty"><b>找不到商品</b>${lowOnly?"目前沒有低庫存的商品。":"換個關鍵字試試看。"}</div>`; return; }
-  list.innerHTML=rows.map(i=>itemCard(i,false)).join("");
+  list.innerHTML=(showOff?list.innerHTML:"")+rows.map(i=>itemCard(i,false)).join("");
 }
 
 function renderLog(){
@@ -601,6 +608,7 @@ function brandForm(name){
       <p class="hint" style="margin:-4px 0 0">點左邊方塊可以放品牌 Logo；分類前面的方塊可以放分類照片。</p>
       <label class="chk"><input type="checkbox" id="bSku" ${d.hasSku?"checked":""}>商品有編號</label>
       <label class="chk"><input type="checkbox" id="bPhoto" ${d.needsPhoto?"checked":""}>這個品牌每件售出都要拍照</label>
+      <label class="chk"><input type="checkbox" id="bOff" ${soldOff(name||"")?"checked":""}>賣完就下架（剩 0 件不顯示在商品清單）</label>
       <div class="field">分類<div id="bCats" style="display:flex;flex-direction:column;gap:8px">${(name?catsOf(name):[]).map(c=>row(c,its.filter(i=>i.category===c).length)).join("")}</div>
         <button class="btn" type="button" id="bAddCat">＋ 新增分類</button></div>
       ${!isNew&&isOwner()?`<div class="field">廠商看庫存的連結<div id="bVend" style="display:flex;flex-direction:column;gap:8px">${vendorBox(name)}</div></div>`:""}
@@ -651,7 +659,7 @@ function brandForm(name){
         }
         const bref=d.id?db.collection("brands").doc(d.id):db.collection("brands").doc();
         const {id:_id,...keep}=d;
-        ops.push({ref:bref,replace:true,data:{...keep,name:nn,hasSku:m.querySelector("#bSku").checked,needsPhoto:m.querySelector("#bPhoto").checked,categories:cats,logo:imgs.logo,catImages}});
+        ops.push({ref:bref,replace:true,data:{...keep,name:nn,hasSku:m.querySelector("#bSku").checked,needsPhoto:m.querySelector("#bPhoto").checked,soldOff:m.querySelector("#bOff").checked,categories:cats,logo:imgs.logo,catImages}});
         await commitOps(ops);
         if(renamed && brandFilter===name) brandFilter=nn;
         closeModal(); toast(isNew?"已新增品牌":"已儲存品牌與分類");
@@ -1043,7 +1051,7 @@ function stocktakeDetail(h){
 }
 function stocktakeLines(brand){
   // one line per item, or per variant when the item has 規格
-  const its=items.filter(i=>!brand||i.brand===brand).sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
+  const its=items.filter(i=>(!brand||i.brand===brand)&&!offShelf(i)).sort((x,y)=>String(x.brand).localeCompare(String(y.brand),"zh-Hant")||String(x.sku||x.name).localeCompare(String(y.sku||y.name),"zh-Hant",{numeric:true}));
   // items that are the same product (same name once the 編號 is dropped, same category) are counted together, e.g. all 項鍊
   const out=[]; const groups={};
   its.forEach(i=>{ if(hasVar(i)) return i.variants.forEach(v=>out.push({key:i.id+"|"+v.name,it:i,variant:v.name,sys:Number(v.qty||0)}));
@@ -1151,7 +1159,8 @@ document.addEventListener("click",e=>{
   else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
   else if(el=g("data-act")){ const it=items.find(i=>i.id===el.dataset.act); it&&actionSheet(it); }
   else if(el=g("data-brand")){ openBrand=openBrand===el.dataset.brand?null:el.dataset.brand; renderSettle(); }
-  else if(el=g("data-bf")){ brandFilter=el.dataset.bf; catFilter=""; renderItems(); }
+  else if(el=g("data-bf")){ brandFilter=el.dataset.bf; catFilter=""; showOff=false; renderItems(); }
+  else if(el=g("data-off")){ showOff=!showOff; renderItems(); }
   else if(el=g("data-cf")){ catFilter=el.dataset.cf; renderItems(); }
   else if(el=g("data-tf")){ typeFilter=el.dataset.tf; renderLog(); }
   else if(el=g("data-tab")){ showTab(el.dataset.tab); }
