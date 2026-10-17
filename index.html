@@ -296,7 +296,7 @@ body.stmt-open{overflow:hidden}
 <main>
   <section class="screen" id="p-items">
     <div class="stats">
-      <div class="stat money"><span class="k">今日銷售</span><span class="v num" id="sToday">–</span></div>
+      <button class="stat money" id="sTodayBtn" type="button"><span class="k">今日銷售 ›</span><span class="v num" id="sToday">–</span></button>
       <div class="stat money"><span class="k">本月抽成</span><span class="v num" id="sMonth">–</span></div>
       <button class="stat alert" id="sLowBtn" type="button" aria-pressed="false"><span class="k">低庫存</span><span class="v num" id="sLow">–</span></button>
     </div>
@@ -431,6 +431,18 @@ function renderSummary(){
   $("#sMonth").textContent=money(liveSales().filter(m=>monthKey(m.at)===mk).reduce((s,m)=>s+Number(m.commission||0),0));
 }
 
+function todaySales(){
+  const start=new Date(); start.setHours(0,0,0,0); const d=new Date();
+  const list=liveSales().filter(m=>m.at>=start.getTime()).sort((a,b)=>b.at-a.at);
+  const sum=k=>list.reduce((t,m)=>t+Number(m[k]||0),0);
+  const brands=[...new Set(list.map(m=>m.brand||""))];
+  openModal(`<h2>今日銷售 ${d.getMonth()+1}/${d.getDate()}</h2>
+    <p class="hint">共 ${fmtN(sum("qty"))} 件 · 銷售額 <b class="money">${money(sum("amount"))}</b> · 我們抽成 ${money(sum("commission"))}</p>
+    ${list.length?brands.map(b=>{ const g=list.filter(m=>(m.brand||"")===b); return `<div class="section-h">${esc(b||"其他")}　${fmtN(g.reduce((t,m)=>t+Number(m.qty||0),0))} 件 · ${money(g.reduce((t,m)=>t+Number(m.amount||0),0))}</div>
+      <div class="cards">${g.map(m=>`<div class="card"><div class="body"><span class="title">${esc(m.itemName||"")}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span class="meta">${[m.sku?`#${esc(m.sku)}`:"",m.pay==="linepay"?'<span class="tag lp">LINE Pay</span>':"",esc(who(m.by)),esc(m.note||"")].filter(Boolean).join(" · ")}</span></div><div class="right" style="display:flex;flex-direction:column;align-items:flex-end;gap:4px"><b class="num">${money(m.amount)}</b>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</div></div>`).join("")}</div>`; }).join("")
+      :'<div class="empty"><b>今天還沒有售出</b></div>'}
+    <div class="acts"><button class="btn" type="button" id="tdClose">關閉</button></div>`, m=>{ m.querySelector("#tdClose").onclick=closeModal; });
+}
 function itemCard(i, pick){
   const s=status(i);
   return `<div class="card tap" tabindex="0" role="button" data-${pick?"pick":"act"}="${esc(i.id)}">
@@ -1343,6 +1355,7 @@ $("#importBtn").onclick=()=>{ if(db) $("#importFile").click(); };
 $("#importFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importCSV(f); };
 $("#q").oninput=renderItems; $("#lq").oninput=renderLog;
 $("#sLowBtn").onclick=()=>{ lowOnly=!lowOnly; renderSummary(); renderItems(); };
+$("#sTodayBtn").onclick=todaySales;
 renderItems(); renderSettle(); renderMore();
 
 
