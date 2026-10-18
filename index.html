@@ -929,6 +929,11 @@ async function compressPhoto(file){
   } finally { URL.revokeObjectURL(url); }
 }
 
+// Latest copy of a doc from the server, but never wait more than a few seconds on a weak connection: fall back to the phone's copy.
+async function freshDoc(ref){
+  try{ const s=await Promise.race([ref.get(),new Promise((_,rej)=>setTimeout(()=>rej(new Error("slow")),3000))]); return s.exists===false?null:s.data(); }
+  catch(e){ try{ const c=await ref.get({source:"cache"}); return c.exists===false?null:c.data(); }catch(e2){ return null; } }
+}
 function sellForm(it){
   const rate=Number(it.rate??DEFAULT_RATE);
   openModal(`
@@ -986,17 +991,19 @@ function sellForm(it){
       const btn=m.querySelector("#sSave"); btn.disabled=true;
       try{
         const ref=db.collection("items").doc(it.id);
-        const fresh=(await ref.get()).data()||{}; const cur=Number(fresh.qty||0);
+        const fresh=(await freshDoc(ref))||it; const cur=Number(fresh.qty||0);
         const vn=hasVar(fresh)?(m.querySelector("#xVar")||{}).value:"";
         if(hasVar(fresh)&&!vn){ btn.disabled=false; return err("請先選規格。"); }
         const vb=vn?bumpVariant(fresh,vn,-n):null;
         if(vb&&vb.vqty<0){ btn.disabled=false; return err(`${vn} 只剩 ${fmtN(vb.vqty+n)}，不能賣 ${fmtN(n)}。`); }
         if(n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}，不能賣 ${fmtN(n)}。`); }
         const {amt,commission,payout,fee}=calc(); const after=vb?vb.vqty:cur-n;
-        let photoId="";
-        if(photo){ const p=await db.collection("photos").add({data:photo,itemName:it.name,at:Date.now(),by:myId||""}); photoId=p.id; }
-        await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,pay:payBy,fee,charged:amt+fee,photoId,after,note:m.querySelector("#sNote").value.trim()||(dv===today?"":"補登"),at});
+        // one batch, not awaited: the phone saves it at once and uploads in the background, so a slow connection can't freeze the button
+        const b=db.batch(); let photoId="";
+        if(photo){ const pr=db.collection("photos").doc(); photoId=pr.id; b.set(pr,{data:photo,itemName:it.name,at:Date.now(),by:myId||""}); }
+        b.update(ref,vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
+        b.set(db.collection("moves").doc(),{itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",sku:fresh.sku||it.sku||"",brand:it.brand||"",type:"sale",qty:n,price:Number(m.querySelector("#sPrice").value||0),amount:amt,rate,commission,payout,pay:payBy,fee,charged:amt+fee,photoId,after,note:m.querySelector("#sNote").value.trim()||(dv===today?"":"補登"),by:myId||"",at});
+        b.commit().catch(e=>toast("售出沒有存到："+errText(e)+"，請重新整理後檢查。"));
         closeModal(); toast(payBy==="linepay"?`已售出，客人付 ${money(amt+fee)}（LINE Pay）`:`已售出 ${fmtN(n)} ${it.unit||"件"}，${money(amt)}（店家 ${money(payout)}）`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
@@ -1028,15 +1035,16 @@ function stockForm(it){
       const btn=m.querySelector("#kSave"); btn.disabled=true;
       try{
         const ref=db.collection("items").doc(it.id);
-        const fresh=(await ref.get()).data()||{}; const cur=Number(fresh.qty||0);
+        const fresh=(await freshDoc(ref))||it; const cur=Number(fresh.qty||0);
         const vn=hasVar(fresh)?(m.querySelector("#xVar")||{}).value:"";
         if(hasVar(fresh)&&!vn){ btn.disabled=false; return err("請先選規格。"); }
         const vb=vn?bumpVariant(fresh,vn,t==="in"?n:-n):null;
         if(vb&&vb.vqty<0){ btn.disabled=false; return err(`${vn} 只剩 ${fmtN(vb.vqty+n)}。`); }
         if(t==="return" && n>cur){ btn.disabled=false; return err(`庫存只剩 ${fmtN(cur)}。`); }
         const after=vb?vb.vqty:(t==="in"?cur+n:cur-n);
-        await ref.update(vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
-        await addMove({itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",brand:it.brand||"",type:t,qty:n,after,note:m.querySelector("#kNote").value.trim()});
+        const b=db.batch(); b.update(ref,vb?{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}:{qty:after,updatedAt:Date.now()});
+        b.set(db.collection("moves").doc(),{itemId:it.id,itemName:varLabel(it,vn),variant:vn||"",sku:fresh.sku||it.sku||"",brand:it.brand||"",type:t,qty:n,after,note:m.querySelector("#kNote").value.trim(),by:myId||"",at:Date.now()});
+        b.commit().catch(e=>toast("沒有存到："+errText(e)));
         closeModal(); toast(`${TYPE[t]} ${fmtN(n)}，結存 ${fmtN(after)}`);
       }catch(e){ btn.disabled=false; err("儲存失敗："+errText(e)); }
     };
@@ -1058,11 +1066,12 @@ function voidSale(m){
     md.querySelector("#vYes").onclick=async()=>{
       md.querySelector("#vYes").disabled=true;
       try{
-        const ref=db.collection("items").doc(m.itemId); const s=await ref.get();
-        if(s.exists){ const fresh=s.data()||{};
-          if(m.variant&&hasVar(fresh)){ const vb=bumpVariant(fresh,m.variant,Number(m.qty||0)); await ref.update({variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}); }
-          else await ref.update({qty:Number(fresh.qty||0)+Number(m.qty||0),updatedAt:Date.now()}); }
-        await db.collection("moves").doc(m.id).update({void:true,voidBy:myId||"",voidAt:Date.now()});
+        const ref=db.collection("items").doc(m.itemId); const fresh=await freshDoc(ref); const b=db.batch();
+        if(fresh){
+          if(m.variant&&hasVar(fresh)){ const vb=bumpVariant(fresh,m.variant,Number(m.qty||0)); b.update(ref,{variants:vb.variants,qty:vb.qty,updatedAt:Date.now()}); }
+          else b.update(ref,{qty:Number(fresh.qty||0)+Number(m.qty||0),updatedAt:Date.now()}); }
+        b.update(db.collection("moves").doc(m.id),{void:true,voidBy:myId||"",voidAt:Date.now()});
+        b.commit().catch(e=>toast("作廢沒有存到："+errText(e)));
         closeModal(); toast("已作廢");
       }catch(e){ const p=md.querySelector("#vErr"); p.textContent="作廢失敗："+errText(e); p.hidden=false; md.querySelector("#vYes").disabled=false; }
     };
@@ -1372,12 +1381,13 @@ dl = { save: async ({filename, data}) => {
 }};
 
 function gate(html){ const g=$("#gate"); g.innerHTML=html; g.hidden=!html; }
+const lastEmail=()=>{ try{ return localStorage.getItem("lastEmail")||""; }catch(e){ return ""; } };
 function loginScreen(msg){
   gate(`<div class="gatebox">
     <img src="icon.svg" alt="" width="72" height="72">
     <h1>永樂庫存</h1>
     <form id="lg" class="gform">
-      <label class="field">Email<input id="lgE" type="email" autocomplete="username" required></label>
+      <label class="field">Email<input id="lgE" type="email" autocomplete="username" value="${esc(lastEmail())}" required></label>
       <label class="field">密碼<input id="lgP" type="password" autocomplete="current-password" minlength="6" required></label>
       <p class="err" id="lgErr" ${msg?"":"hidden"}>${esc(msg||"")}</p>
       <button class="btn primary" type="submit">登入</button>
@@ -1390,6 +1400,7 @@ function loginScreen(msg){
     "auth/network-request-failed":"沒有網路，請連上網路再試。", "auth/too-many-requests":"嘗試太多次，請稍後再試。" }[e.code] || e.message);
   $("#lg").onsubmit=async e=>{ e.preventDefault(); err("");
     try{ await auth.signInWithEmailAndPassword($("#lgE").value.trim(), $("#lgP").value); }catch(x){ err(msgOf(x)); } };
+  if(lastEmail()) $("#lgP").focus();
   $("#lgReg").onclick=async()=>{ err("");
     const em=$("#lgE").value.trim(), pw=$("#lgP").value;
     if(!em||pw.length<6) return err("請先填 Email 和至少 6 個字的密碼，再按註冊。");
@@ -1494,7 +1505,7 @@ async function importMigration(file){
 }
 
 async function start(u){
-  const em=lower(u.email);
+  const em=lower(u.email); try{ localStorage.setItem("lastEmail",u.email||""); }catch(e){}
   // a flaky connection must not look like being signed out: fall back to the cached staff record, then keep retrying
   const ref=db.collection("staff").doc(em); let s=null;
   try{ s=await ref.get(); }catch(e){ try{ s=await ref.get({source:"cache"}); }catch(e2){} }
@@ -1534,8 +1545,9 @@ if(!window.FIREBASE_CONFIG || !window.FIREBASE_CONFIG.apiKey){
 }else{
   db = firebase.firestore();
   db.enablePersistence({synchronizeTabs:true}).catch(()=>{});
-  try{ auth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(()=>{}); }catch(e){}
-  loginScreen();
+  // Sign-in is kept on the device (Firebase's default). Restoring it can take a moment on a phone, so show a neutral
+  // screen until Firebase answers instead of flashing the login form, which looked like being logged out.
+  gate(`<div class="gatebox"><img src="icon.svg" alt="" width="72" height="72"><h1>永樂庫存</h1><p>開啟中…</p></div>`);
   auth.onAuthStateChanged(u=>{ unsubs.forEach(f=>f()); unsubs=[]; meStaff=null; if(u) start(u); else loginScreen(); });
 }
 if("serviceWorker" in navigator) navigator.serviceWorker.register("sw.js",{updateViaCache:"none"}).catch(()=>{});
