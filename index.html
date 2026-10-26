@@ -113,6 +113,7 @@ button.stat{cursor:pointer}
 .card.void{opacity:.55} .card.void .title{text-decoration:line-through}
 .amt{font-weight:900}
 .mini{border:0;background:var(--surface-2);color:var(--ink);border-radius:10px;padding:6px 12px;font:inherit;font-size:13px;font-weight:700;cursor:pointer;min-height:34px}
+.mini.addhere{background:var(--accent);color:var(--accent-ink)}
 .daysep{font-size:13px;font-weight:700;color:var(--muted);margin-top:6px}
 
 /* settle */
@@ -484,7 +485,7 @@ function renderItems(){
   [...sel].forEach(id=>{ if(!items.some(i=>i.id===id)) sel.delete(id); });
   const bar=$("#selBar"); bar.className="selbar"+(selMode?" on":"");
   bar.innerHTML=selMode?`<b>已選 ${fmtN(sel.size)} 項</b><span style="display:flex;gap:6px;flex-wrap:wrap"><button class="mini" type="button" data-selall>${rows.every(i=>sel.has(i.id))?"取消全選":"全選這些"}（${fmtN(rows.length)}）</button><button class="mini danger" type="button" data-seldel ${sel.size?"":"disabled"}>刪除</button><button class="mini" type="button" data-selx>完成</button></span>`
-    :`<button class="mini" type="button" data-selon>選取多項</button>`;
+    :`<span style="display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end">${brandFilter&&!showOff?`<button class="mini addhere" type="button" data-addhere>＋ 新增到 ${esc(catFilter||brandFilter)}</button>`:""}<button class="mini" type="button" data-selon>選取多項</button></span>`;
   bar._rows=rows.map(i=>i.id);
   const list=$("#list");
   if(!items.length){ list.innerHTML='<div class="empty"><b>還沒有商品</b>到「更多」新增商品，或匯入 Google 試算表的 CSV。</div>'; return; }
@@ -787,7 +788,11 @@ function quickSell(){
 
 
 function itemForm(it){
-  const isNew=!it; it=it||{name:"",brand:brandFilter||"",category:catFilter||"",price:"",qty:0,unit:"件",min:0,rate:DEFAULT_RATE,needsPhoto:false,note:""};
+  const isNew=!it;
+  // new item from a filtered list: copy brand, category and the usual price of that category
+  const like=isNew&&catFilter?items.filter(i=>i.brand===brandFilter&&i.category===catFilter):[];
+  const usual=like.length?Object.entries(like.reduce((o,i)=>(o[i.price]=(o[i.price]||0)+1,o),{})).sort((a,b)=>b[1]-a[1])[0][0]:"";
+  it=it||{name:catFilter?catFilter.replace(/^[A-Z]\s+/,""):"",brand:brandFilter||"",category:catFilter||"",price:usual,qty:0,unit:"件",min:0,rate:DEFAULT_RATE,needsPhoto:false,note:""};
   openModal(`
     <h2>${isNew?"新增商品":"編輯商品"}</h2>
     <form id="f" style="display:flex;flex-direction:column;gap:10px">
@@ -828,6 +833,8 @@ function itemForm(it){
         <button class="btn primary" type="submit" id="fSave">儲存</button>
       </div>
     </form>`, m=>{
+    if(isNew&&it.name){ const base=it.name; const nm=m.querySelector("#fName"); let auto=base;
+      m.querySelector("#fSku").addEventListener("input",e=>{ if(nm.value.trim()===auto.trim()){ auto=e.target.value.trim()?`${base} ${e.target.value.trim()}`:base; nm.value=auto; } }); }
     m.querySelector("#fCancel").onclick=closeModal;
     let image=it.image||"";
     const onImg=async e=>{ const f=e.target.files[0]; if(!f) return;
@@ -1275,6 +1282,7 @@ document.addEventListener("click",e=>{
   else if(el=g("data-stm")){ statement(el.dataset.stm); }
   else if(el=g("data-man")){ manualSettle(el.dataset.man); }
   else if(el=g("data-bed")){ db&&brandForm(el.dataset.bed); }
+  else if(el=g("data-addhere")){ itemForm(null); }
   else if(el=g("data-selon")){ selMode=true; sel.clear(); renderItems(); }
   else if(el=g("data-selx")){ selMode=false; sel.clear(); renderItems(); }
   else if(el=g("data-selall")){ const ids=$("#selBar")._rows||[]; const all=ids.every(id=>sel.has(id)); ids.forEach(id=>all?sel.delete(id):sel.add(id)); renderItems(); }
