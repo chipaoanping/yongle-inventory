@@ -177,6 +177,11 @@ body.stmt-open{overflow:hidden}
 .stsum div{background:#f3ebdd;border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:2px}
 .stsum span{font-size:12px;color:#86705e;font-weight:700}.stsum b{font-family:var(--f-head);font-size:20px}
 .stsum .hl{background:#a8322d;color:#fffaf1}.stsum .hl span{color:#fffaf1;opacity:.85}
+.st2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px;align-items:start}
+.st2 table{font-size:12.5px;line-height:1.3}.stdoc .st2 th,.stdoc .st2 td{padding:5px 4px}.stdoc .st2 td.l{white-space:normal;text-align:left}.stdoc .st2 td:first-child{width:40px}
+.st2tot{display:flex;flex-wrap:wrap;gap:6px 22px;justify-content:flex-end;align-items:baseline;border-top:2px solid #3b2a1f;padding:9px 6px 0;color:#a8322d;font-weight:700;font-variant-numeric:tabular-nums}.st2tot>b{margin-right:auto}
+@media (max-width:620px){.st2{grid-template-columns:1fr}.st2 table+table thead{display:none}}
+@media print{.st2{grid-template-columns:1fr 1fr}.st2 table+table thead{display:table-header-group}.stsum{grid-template-columns:repeat(auto-fit,minmax(80px,1fr))!important}.stdoc{padding:18px 20px!important}.stdoc h2{break-after:avoid;margin-top:16px}.stdoc table,.st2tot{break-inside:avoid}}
 .stdoc h2{font-family:var(--f-head);font-size:17px;margin:22px 0 8px;letter-spacing:.06em}.stdoc h2::before{content:"⟡ ";color:#a8322d}
 .stdoc table{width:100%;border-collapse:collapse;font-size:15px;font-variant-numeric:tabular-nums}
 .stdoc th,.stdoc td{padding:9px 10px;border-bottom:1px solid #e3d5bf;text-align:right;white-space:nowrap}
@@ -267,6 +272,17 @@ function renderSettleV(){
 }
 // is this month the last one of its payment period ("9–10 月" → 10)?
 const lastOf=x=>{ const m=String(x.period||"").match(/(\d+)\D+(\d+)/); return !!m&&Number(x.month.slice(5))===Number(m[2]); };
+// sales detail as two side-by-side tables when long, so a statement fits on one page
+function salesTables(rows,nm,foot){
+  const md=t=>{ const d=new Date(t); return `${d.getMonth()+1}/${d.getDate()}`; };
+  const head='<thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售</th><th>抽成</th><th>支付</th></tr></thead>';
+  const tr=m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m[nm])}${m.qty>1?` ×${fmtN(m.qty)}`:""}</td><td>${fmtN(m.amount)}</td><td>${fmtN(m.commission)}</td><td>${fmtN(m.payout)}</td></tr>`;
+  if(rows.length<=6) return `<table><thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售金額</th><th>抽成</th><th>支付金額</th></tr></thead><tbody>${rows.map(tr).join("")}</tbody><tfoot>${foot}</tfoot></table>`;
+  const h=Math.ceil(rows.length/2);
+  const sum=k=>fmtN(rows.reduce((t,m)=>t+Number(m[k]||0),0));
+  return `<div class="st2"><table>${head}<tbody>${rows.slice(0,h).map(tr).join("")}</tbody></table><table>${head}<tbody>${rows.slice(h).map(tr).join("")}</tbody></table></div>
+    <div class="st2tot"><b>總額（${sum("qty")} 件）</b><span>販售 <b>${sum("amount")}</b></span><span>抽成 <b>${sum("commission")}</b></span><span>支付 <b>${sum("payout")}</b></span></div>`;
+}
 function statement(key){
   const ks=key.split(","); const xs=(view.settle||[]).filter(z=>ks.includes(z.month)).sort((a,b)=>a.month<b.month?-1:1); if(!xs.length) return;
   const multi=xs.length>1||ks.length>1; const x0=xs[0], xl=xs[xs.length-1]; const y=Number(x0.month.slice(0,4)); const mn=m=>Number(m.slice(5));
@@ -278,11 +294,9 @@ function statement(key){
   ov.innerHTML=`<div class="stbar"><button class="btn" type="button" data-stx>關閉</button><span class="grow"></span><button class="btn primary" type="button" data-stp>列印／存成 PDF</button></div>
   <article class="stdoc">
     <header class="sthead">${view.logo?`<img src="${esc(view.logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(view.brand)}</h1><p>${multi?`${y} 年 ${esc(x0.period)}（${esc(x0.due)}付）`:`${y} 年 ${mn(x0.month)} 月 · 付款期 ${esc(x0.period)}（${esc(x0.due)}付）`}${xs.every(x=>x.paid)?` · <b class="ok">已付 ${esc(xl.paidOn||"")}</b>`:""}</p></div></header>
-    <section class="stsum"><div><span>販售金額</span><b>${money(tot("amount"))}</b></div><div><span>抽成</span><b>${money(tot("commission"))}</b></div><div><span>支付金額</span><b>${money(tot("payout"))}</b></div><div><span>LINE Pay</span><b>−${money(tot("lpFee"))}</b></div><div class="hl"><span>總轉帳金額</span><b>${money(tot("net"))}</b></div></section>
+    <section class="stsum"><div><span>販售金額</span><b>${money(tot("amount"))}</b></div><div><span>抽成</span><b>${money(tot("commission"))}</b></div><div><span>支付金額</span><b>${money(xs.filter(x=>!x.manual).reduce((t,x)=>t+Number(x.payout||0),0))}</b></div>${manual.length?`<div><span>紙本結算</span><b>${money(manual.reduce((t,x)=>t+Number(x.net||0),0))}</b></div>`:""}<div><span>LINE Pay</span><b>−${money(tot("lpFee"))}</b></div><div class="hl"><span>總轉帳金額</span><b>${money(tot("net"))}</b></div></section>
     ${rows.length?`<h2>${tag} 銷售明細</h2>
-    <table><thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售金額</th><th>抽成</th><th>支付金額</th></tr></thead><tbody>
-      ${rows.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.name)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</td><td>${fmtN(m.amount)}</td><td>${fmtN(m.commission)}</td><td>${fmtN(m.payout)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(rows.reduce((t,m)=>t+Number(m.qty||0),0))} 件）</td><td>${fmtN(rows.reduce((t,m)=>t+m.amount,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.commission,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.payout,0))}</td></tr></tfoot></table>`:""}
+    ${salesTables(rows,"name",`<tr><td></td><td class="l">總額（${fmtN(rows.reduce((t,m)=>t+Number(m.qty||0),0))} 件）</td><td>${fmtN(rows.reduce((t,m)=>t+m.amount,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.commission,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.payout,0))}</td></tr>`)}`:""}
     ${lp.length?`<h2>${tag} LINE Pay 費用</h2>
     <table><thead><tr><th>日期</th><th class="l">消費項目</th><th>消費金額</th><th>手續費</th></tr></thead><tbody>
       ${lp.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.name)}</td><td>${fmtN(m.amount)}</td><td>${fmtN(Math.round(m.amount*3/100))}</td></tr>`).join("")}
