@@ -38,6 +38,11 @@ service cloud.firestore {
       allow get: if true;
     }
 
+    // 收支總覽讀永樂每月結算金額：知道代碼的人可以讀那一份（不能列出全部）
+    match /ledgerFeed/{token} {
+      allow get: if true;
+    }
+
     match /{col}/{id} {
       allow read, write: if isStaff() && !(col in ['staff', 'requests', 'config']);
     }

@@ -347,6 +347,7 @@ body.stmt-open{overflow:hidden}
       <p class="hint">店員在登入畫面按「註冊帳號」並送出申請後，會出現在這裡等你核准。</p>
     </div>
     <div class="menu">
+      <button type="button" id="ledgerBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M10 14a4 4 0 0 0 5.7 0l3-3a4 4 0 0 0-5.7-5.7l-1 1"/><path d="M14 10a4 4 0 0 0-5.7 0l-3 3a4 4 0 0 0 5.7 5.7l1-1"/></svg></span><span>連到收支總覽<small>每月結算金額自動算進永樂的「寄售分潤」支出</small></span></button>
       <button type="button" id="migrateBtn" hidden><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M4 7h16M4 12h16M4 17h10"/></svg></span><span>搬入舊資料<small>匯入從 Claude 頁面匯出的 JSON（只需一次）</small></span></button>
       <button type="button" id="logoutBtn"><span class="ico"><svg class="i" viewBox="0 0 24 24"><path d="M15 4h4v16h-4M10 8l-4 4 4 4M6 12h10"/></svg></span><span>登出<small id="meLine"></small></span></button>
     </div>
@@ -668,6 +669,50 @@ async function syncVendorViews(){
     if(vendorSent[key]===json) continue;
     try{ await db.collection("vendorViews").doc(d.viewToken).set({brand:d.name,logo:brandImg(d.name),items:await vendorItems(d.name),...(sales?{sales,salesFrom:VENDOR_SALES_MONTHS}:{}),...(settle?{settle}:{}),updatedAt:Date.now()},{merge:true}); vendorSent[key]=json; }catch(e){}
   }
+  syncLedgerFeed();
+}
+
+/* ---------- 收支總覽：每月各品牌結算金額 ---------- */
+// 收支總覽用代碼讀 ledgerFeed/{代碼}，把金額算進永樂當月的「寄售分潤」支出。
+// 最近幾個月用售出紀錄即時算（和「結算」分頁一樣）；更早的月份只用已標記付款時存下的金額。
+let ledgerToken="", ledgerSent="";
+const LEDGER_LIVE_MONTHS=6, LEDGER_KEEP_MONTHS=24;
+function ledgerMonths(){
+  const d=new Date(), mk=k=>monthKey(new Date(d.getFullYear(),d.getMonth()-k,1).getTime()), out={};
+  for(let k=0;k<LEDGER_LIVE_MONTHS;k++){ const m=mk(k);
+    const rows=settleRows(m).filter(r=>(r.count||r.manual)&&r.net).map(r=>{ const st=settles[`${m}_${brandKey(r.brand)}`]||{}; return {brand:r.brand,payout:r.net,paid:!!st.paid,paidOn:st.paidOn||"",manual:!!r.manual}; });
+    if(rows.length) out[m]=rows; }
+  const liveFrom=mk(LEDGER_LIVE_MONTHS-1), oldest=mk(LEDGER_KEEP_MONTHS-1);
+  Object.values(settles).forEach(st=>{ const m=st.month; if(!m||!st.brand||m>=liveFrom||m<oldest) return;
+    const pay=Math.round(st.manualNet!=null?Number(st.manualNet):Number(st.payout)); if(!pay) return;
+    (out[m] ||= []).push({brand:st.brand,payout:pay,paid:!!st.paid,paidOn:st.paidOn||"",manual:st.manualNet!=null}); });
+  return out;
+}
+async function syncLedgerFeed(){
+  if(!db||!ledgerToken||!movesFresh||!settlesFresh) return;
+  const months=ledgerMonths(), json=ledgerToken+JSON.stringify(months);
+  if(ledgerSent===json) return;
+  try{ await db.collection("ledgerFeed").doc(ledgerToken).set({months,updatedAt:Date.now()}); ledgerSent=json; }catch(e){}
+}
+function ledgerForm(){
+  const draw=()=>`<h2>連到收支總覽</h2>
+    <p class="hint">把下面的代碼貼到收支總覽首頁「資料管理」的「永樂庫存代碼」，永樂每月付給各品牌的金額就會自動算進當月的「寄售分潤」支出。這個 App 有人打開時就會更新。</p>
+    ${ledgerToken?`<input readonly value="${esc(ledgerToken)}" aria-label="代碼" onclick="this.select()" style="font-family:ui-monospace,monospace">
+    <div class="acts"><button class="btn primary" type="button" data-lg="copy">複製代碼</button><button class="btn" type="button" data-lg="renew">換新代碼</button><button class="btn danger" type="button" data-lg="off">關閉</button></div>`
+    :`<button class="btn primary" type="button" data-lg="make">產生代碼</button>`}
+    <button class="btn" type="button" data-lg="close">關閉視窗</button>`;
+  openModal(`<div id="lgBox" style="display:flex;flex-direction:column;gap:12px">${draw()}</div>`, m=>{
+    const box=m.querySelector("#lgBox");
+    box.addEventListener("click",async e=>{ const b=e.target.closest("[data-lg]"); if(!b) return; const act=b.dataset.lg;
+      if(act==="close"){ closeModal(); return; }
+      if(act==="copy"){ try{ await navigator.clipboard.writeText(ledgerToken); toast("已複製代碼"); }catch(_){ toast("請長按代碼複製"); } return; }
+      if((act==="renew"||act==="off")&&box.dataset.armed!==act){ box.dataset.armed=act; b.textContent=act==="renew"?"再按一次換新":"再按一次關閉"; return; }
+      try{ const ops=[]; if(ledgerToken) ops.push({ref:db.collection("ledgerFeed").doc(ledgerToken),del:true});
+        const tok=act==="off"?"":newToken(); ops.push({ref:db.collection("meta").doc("ledger"),data:{token:tok,at:Date.now(),by:myId||""}});
+        await commitOps(ops); ledgerToken=tok; ledgerSent=""; delete box.dataset.armed; box.innerHTML=draw(); syncLedgerFeed();
+        toast(act==="off"?"已關閉，收支總覽不會再更新":act==="renew"?"已換新代碼，請到收支總覽貼上新代碼":"已產生代碼");
+      }catch(err){ toast("失敗："+errText(err)); } });
+  });
 }
 const vendorUrl = t => new URL("vendor.html?t="+t, location.href).href;
 const newToken = () => Array.from(crypto.getRandomValues(new Uint8Array(16))).map(x=>x.toString(16).padStart(2,"0")).join("");
@@ -1485,6 +1530,7 @@ function subscribe(){
     e=>{ conn.textContent="同步失敗"; conn.className="sync bad"; $("#list").innerHTML=`<div class="empty"><b>讀取失敗</b>${esc(e.message)}</div>`; }));
   unsubs.push(db.collection("moves").orderBy("at","desc").limit(500).onSnapshot(META,s=>{ moves=s.docs.map(d=>({id:d.id,...d.data()})); movesFresh=!(s.metadata&&s.metadata.fromCache); scheduleVendorSync(); renderSummary(); renderLog(); renderSettle(); }, ()=>{}));
   unsubs.push(db.collection("brands").onSnapshot(s=>{ brandDocs=s.docs.map(d=>({id:d.id,...(d.data()||{})})); renderItems(); renderMore(); scheduleVendorSync(); }, ()=>{}));
+  unsubs.push(db.collection("meta").doc("ledger").onSnapshot(d=>{ ledgerToken=(d.exists&&d.data().token)||""; scheduleVendorSync(); }, ()=>{}));
   unsubs.push(db.collection("settlements").onSnapshot(META,s=>{ settles={}; s.docs.forEach(d=>settles[d.id]=d.data()); settlesFresh=!(s.metadata&&s.metadata.fromCache); renderSettle(); scheduleVendorSync(); }, ()=>{}));
   unsubs.push(db.collection("staff").onSnapshot(s=>{ staffDocs=s.docs.map(d=>d.data()); names={}; staffDocs.forEach(x=>{ if(x.uid) names[x.uid]=x.name||x.email; }); renderLog(); renderStaff(); }, ()=>{}));
   if(isOwner()) unsubs.push(db.collection("requests").onSnapshot(s=>{ requestDocs=s.docs.map(d=>d.data()); renderStaff(); }, ()=>{}));
@@ -1548,12 +1594,13 @@ async function start(u){
   if(meStaff.uid!==u.uid){ try{ await db.collection("staff").doc(em).update({uid:u.uid}); }catch(e){} }
   gate("");
   $("#meLine").textContent=`${meStaff.name||u.email}（${isOwner()?"負責人":"店員"}）`;
-  $("#migrateBtn").hidden=!isOwner();
+  $("#migrateBtn").hidden=!isOwner(); $("#ledgerBtn").hidden=!isOwner();
   subscribe(); renderSettle(); renderStaff();
 }
 
 $("#logoutBtn").onclick=()=>auth&&auth.signOut();
 $("#migrateBtn").onclick=()=>$("#migrateFile").click();
+$("#ledgerBtn").onclick=()=>{ if(db&&isOwner()) ledgerForm(); };
 $("#migrateFile").onchange=e=>{ const f=e.target.files[0]; e.target.value=""; f&&importMigration(f); };
 $("#exportItemsBtn").hidden=false; $("#exportSettleBtn").hidden=false;
 $("#exportItemsBtn").onclick=()=>{
