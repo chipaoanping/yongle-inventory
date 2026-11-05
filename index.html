@@ -577,7 +577,7 @@ function renderSettle(){
       ${r.lpFee?`<div class="period">支付金額 ${money(r.payout)} − LINE Pay 手續費 ${money(r.lpFee)} ＝ 轉帳 <b class="num">${money(r.net)}</b></div>`:""}
       ${pAny?`<div class="period">付款期 ${pl.range}（${pl.due}付）：${pp.map(x=>`${Number(x.m.slice(5))} 月 ${money(x.r?x.r.net:0)}`).join(" ＋ ")} ＝ <b class="num">${money(ptotal)}</b>${pPaid?' <span class="tag ok">已付</span>':""}</div>`:""}
       ${open?`<div class="det">${r.sales.map(m=>`<div><span>${fmtD(m.at)}　${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</span><span style="display:flex;gap:8px;align-items:center"><span class="num">${money(m.amount)}</span>${m.photoId?`<button class="mini" type="button" data-photo="${esc(m.photoId)}">照片</button>`:""}</span></div>`).join("")}</div>`:""}
-      <div class="foot">${r.count?`<button class="payb" type="button" data-stm="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">結算單</button>`:`<button class="payb" type="button" data-man="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">${r.manual?"修改金額":"手動輸入金額"}</button>`}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
+      <div class="foot">${stmtParts(curMonth,r.brand).some(x=>x.r.count)?`<button class="payb" type="button" data-stm="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">結算單</button>`:""}${r.count?"":`<button class="payb" type="button" data-man="${esc(r.brand)}" style="background:var(--surface-2);color:var(--ink)">${r.manual?"修改金額":"手動輸入金額"}</button>`}${!pAny?"":pPaid?`<button class="payb" type="button" data-unpay="${esc(r.brand)}" style="background:var(--surface-2);color:var(--muted)">改回未付</button>`:`<button class="payb" type="button" data-pay="${esc(r.brand)}">標記 ${pl.range}已付</button>`}</div>
     </div>`;
   }).join("");
 }
@@ -1320,26 +1320,37 @@ function manualSettle(brand){
     const del=m.querySelector("#mnDel"); if(del) del.onclick=()=>save({manualNet:null,manualNote:""});
   });
 }
+// A month's statement; the last month of a payment period (e.g. 10 月 for 9–10 月) covers the whole period.
+function stmtParts(mk,brand){
+  const per=periodOf(mk); const ms=mk===per[per.length-1]?per:[mk];
+  return ms.map(m=>({m,r:settleRows(m).find(x=>x.brand===brand)})).filter(x=>x.r&&(x.r.count||x.r.manual));
+}
 function statement(brand){
-  const mk=curMonth; const r=settleRows(mk).find(x=>x.brand===brand); if(!r) return;
-  const [y,mo]=mk.split("-").map(Number); const sales=r.sales.slice().sort((a,b)=>a.at-b.at); const lp=sales.filter(m=>m.pay==="linepay"); const lf=m=>(Number(m.amount||0)*LINEPAY_FEE/100);
+  const mk=curMonth; const parts=stmtParts(mk,brand); if(!parts.length) return;
+  const multi=periodOf(mk).length>1&&mk===periodOf(mk).slice(-1)[0];
+  const [y,mo]=mk.split("-").map(Number); const mn=m=>Number(m.slice(5));
+  const tot=k=>parts.reduce((t,x)=>t+Number(x.r[k]||0),0);
+  const sales=parts.flatMap(x=>x.r.sales).sort((a,b)=>a.at-b.at); const lp=sales.filter(m=>m.pay==="linepay"); const lf=m=>(Number(m.amount||0)*LINEPAY_FEE/100);
   const md=t=>{ const d=new Date(t); return `${d.getMonth()+1}/${d.getDate()}`; };
   const logo=brandImg(brand); const pl=periodLabel(mk); const s=settles[`${mk}_${brandKey(brand)}`];
+  const title=multi?`${y} 年 ${pl.range}`:`${y} 年 ${mo} 月`; const tag=multi?`${y}/${mn(periodOf(mk)[0])}–${mo}`:`${y}/${mo}`;
+  const manual=parts.filter(x=>x.r.manual);
   const ov=document.createElement("div"); ov.id="stmt";
   ov.innerHTML=`<div class="stbar"><button class="btn" type="button" data-stx>關閉</button><span class="grow"></span>${dl?'<button class="btn" type="button" data-stcsv>匯出 Excel</button>':""}<button class="btn primary" type="button" data-stp>列印／存成 PDF</button></div>
   <article class="stdoc">
-    <header class="sthead">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(brand)}</h1><p>${y} 年 ${mo} 月 · 付款期 ${pl.range}（${pl.due}付）${s&&s.paid?` · <b class="ok">已付 ${esc(s.paidOn||"")}</b>`:""}</p></div></header>
-    <section class="stsum"><div><span>販售金額</span><b>${money(r.amount)}</b></div><div><span>抽成</span><b>${money(r.commission)}</b></div><div><span>支付金額</span><b>${money(r.payout)}</b></div>${LINEPAY_FROM_BRAND?`<div><span>LINE Pay</span><b>−${money(r.lpFee)}</b></div>`:""}<div class="hl"><span>總轉帳金額</span><b>${money(r.net)}</b></div></section>
-    <h2>${y}/${mo} 銷售明細</h2>
+    <header class="sthead">${logo?`<img src="${esc(logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(brand)}</h1><p>${title}${multi?`（${pl.due}付）`:` · 付款期 ${pl.range}（${pl.due}付）`}${s&&s.paid?` · <b class="ok">已付 ${esc(s.paidOn||"")}</b>`:""}</p></div></header>
+    <section class="stsum"><div><span>販售金額</span><b>${money(tot("amount"))}</b></div><div><span>抽成</span><b>${money(tot("commission"))}</b></div><div><span>支付金額</span><b>${money(tot("payout"))}</b></div>${LINEPAY_FROM_BRAND?`<div><span>LINE Pay</span><b>−${money(tot("lpFee"))}</b></div>`:""}<div class="hl"><span>總轉帳金額</span><b>${money(tot("net"))}</b></div></section>
+    ${sales.length?`<h2>${tag} 銷售明細</h2>
     <table><thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售金額</th><th>抽成</th><th>支付金額</th></tr></thead><tbody>
       ${sales.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.itemName)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</td><td>${fmtN(m.amount)}</td><td>${fmtN(m.commission)}</td><td>${fmtN(m.payout)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(r.count)} 件）</td><td>${fmtN(r.amount)}</td><td>${fmtN(r.commission)}</td><td>${fmtN(r.payout)}</td></tr></tfoot></table>
-    ${LINEPAY_FROM_BRAND&&lp.length?`<h2>${y}/${mo} LINE Pay 費用</h2>
+      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(sales.reduce((t,m)=>t+Number(m.qty||0),0))} 件）</td><td>${fmtN(sales.reduce((t,m)=>t+Number(m.amount||0),0))}</td><td>${fmtN(sales.reduce((t,m)=>t+Number(m.commission||0),0))}</td><td>${fmtN(sales.reduce((t,m)=>t+Number(m.payout||0),0))}</td></tr></tfoot></table>`:""}
+    ${LINEPAY_FROM_BRAND&&lp.length?`<h2>${tag} LINE Pay 費用</h2>
     <table><thead><tr><th>日期</th><th class="l">消費項目</th><th>消費金額</th><th>手續費</th></tr></thead><tbody>
       ${lp.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.itemName)}</td><td>${fmtN(m.amount)}</td><td>${fmtN(Math.round(lf(m)))}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td></td><td class="l">合計</td><td>${fmtN(r.lpAmt)}</td><td>${fmtN(r.lpFee)}</td></tr></tfoot></table>`:""}
-    <h2>${y}/${mo} 總費用</h2>
-    <table class="sttot"><tbody><tr><th class="l">總費用</th><td>${fmtN(r.payout)}</td></tr>${LINEPAY_FROM_BRAND?`<tr><th class="l">LINE Pay</th><td>${fmtN(r.lpFee)}</td></tr>`:""}<tr class="hl"><th class="l">總轉帳金額</th><td>${fmtN(r.net)}</td></tr></tbody></table>
+      </tbody><tfoot><tr><td></td><td class="l">合計</td><td>${fmtN(tot("lpAmt"))}</td><td>${fmtN(tot("lpFee"))}</td></tr></tfoot></table>`:""}
+    <h2>${tag} 總費用</h2>
+    <table class="sttot"><tbody>${multi?parts.map(x=>`<tr><th class="l">${mn(x.m)} 月${x.r.manual?"（依紙本結算）":""}</th><td>${x.r.manual?fmtN(x.r.net):(x.r.lpFee?`${fmtN(x.r.payout)} − ${fmtN(x.r.lpFee)} ＝ ${fmtN(x.r.net)}`:fmtN(x.r.net))}</td></tr>`).join(""):`<tr><th class="l">總費用</th><td>${fmtN(tot("payout"))}</td></tr>${LINEPAY_FROM_BRAND?`<tr><th class="l">LINE Pay</th><td>${fmtN(tot("lpFee"))}</td></tr>`:""}`}<tr class="hl"><th class="l">總轉帳金額</th><td>${fmtN(tot("net"))}</td></tr></tbody></table>
+    ${manual.length?`<p class="hint">${manual.map(x=>`${mn(x.m)} 月`).join("、")}是依紙本結算單記的金額，沒有逐筆明細。</p>`:""}
     <p class="stfoot">✿ 旗時 Chipao Moments · 永樂市場 2F ✿　製表 ${new Date().toLocaleDateString("zh-TW")}</p>
   </article>`;
   document.body.appendChild(ov); document.body.classList.add("stmt-open");

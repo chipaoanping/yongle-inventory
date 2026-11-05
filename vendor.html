@@ -261,29 +261,35 @@ function renderSettleV(){
     return `<section class="day stl"><h3>${g[0].month.slice(0,4)} 年 ${esc(g[0].period)}（${esc(g[0].due)}付款）<span class="${paid?"ok":"due"}">${paid?`已付${g[0].paidOn?" "+esc(g[0].paidOn):""}`:"未付"}</span></h3>
       ${g.map(x=>`<div class="sbox"><b>${Number(x.month.slice(5))} 月${x.month===mk(Date.now())?"（本月還在累計）":""}${x.manual?"（依紙本結算）":`・售出 ${fmtN(x.count)} 件`}</b>
         ${x.manual?"":`<div class="ln"><span>販售金額</span><span class="num">${money(x.amount)}</span></div><div class="ln"><span>抽成</span><span class="num">−${money(x.commission)}</span></div><div class="ln"><span>支付金額</span><span class="num">${money(x.payout)}</span></div>${x.lpFee?`<div class="ln"><span>LINE Pay 手續費（${money(x.lpAmt)} × 3%）</span><span class="num">−${money(x.lpFee)}</span></div>`:""}`}
-        <div class="ln tot"><span>轉帳金額</span><span class="num">${money(x.net)}</span></div>${x.rows?`<button class="sbtn" type="button" data-stm="${x.month}">結算單</button>`:""}</div>`).join("")}
-      <div class="ln grand"><span>${esc(g[0].period)}合計轉帳</span><b class="num">${money(tot)}</b></div></section>`; }).join("")+'<p class="foot">每月結算一次，兩個月付款一次。</p>'
+        <div class="ln tot"><span>轉帳金額</span><span class="num">${money(x.net)}</span></div>${x.rows&&x.rows.length&&!lastOf(x)?`<button class="sbtn" type="button" data-stm="${x.month}">${Number(x.month.slice(5))} 月結算單</button>`:""}</div>`).join("")}
+      <div class="ln grand"><span>${esc(g[0].period)}合計轉帳</span><b class="num">${money(tot)}</b></div>${g.some(x=>x.rows&&x.rows.length)&&g.some(lastOf)?`<button class="sbtn" type="button" data-stm="${g.map(x=>x.month).join(",")}">${esc(g[0].period)}結算單</button>`:""}</section>`; }).join("")+'<p class="foot">每月結算一次，兩個月付款一次。</p>'
     :`<div class="empty"><b>最近還沒有結算資料</b></div>`;
 }
-function statement(month){
-  const x=(view.settle||[]).find(z=>z.month===month); if(!x) return;
-  const [y,mo]=month.split("-").map(Number); const rows=x.rows||[]; const lp=rows.filter(m=>m.lp);
+// is this month the last one of its payment period ("9–10 月" → 10)?
+const lastOf=x=>{ const m=String(x.period||"").match(/(\d+)\D+(\d+)/); return !!m&&Number(x.month.slice(5))===Number(m[2]); };
+function statement(key){
+  const ks=key.split(","); const xs=(view.settle||[]).filter(z=>ks.includes(z.month)).sort((a,b)=>a.month<b.month?-1:1); if(!xs.length) return;
+  const multi=xs.length>1||ks.length>1; const x0=xs[0], xl=xs[xs.length-1]; const y=Number(x0.month.slice(0,4)); const mn=m=>Number(m.slice(5));
+  const tot=k=>xs.reduce((t,x)=>t+Number(x[k]||0),0);
+  const rows=xs.flatMap(x=>x.rows||[]).sort((a,b)=>a.at-b.at); const lp=rows.filter(m=>m.lp); const manual=xs.filter(x=>x.manual);
+  const tag=multi?`${y}/${mn(x0.month)}–${mn(xl.month)}`:`${y}/${mn(x0.month)}`;
   const md=t=>{ const d=new Date(t); return `${d.getMonth()+1}/${d.getDate()}`; };
   const ov=document.createElement("div"); ov.id="stmt";
   ov.innerHTML=`<div class="stbar"><button class="btn" type="button" data-stx>關閉</button><span class="grow"></span><button class="btn primary" type="button" data-stp>列印／存成 PDF</button></div>
   <article class="stdoc">
-    <header class="sthead">${view.logo?`<img src="${esc(view.logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(view.brand)}</h1><p>${y} 年 ${mo} 月 · 付款期 ${esc(x.period)}（${esc(x.due)}付）${x.paid?` · <b class="ok">已付 ${esc(x.paidOn||"")}</b>`:""}</p></div></header>
-    <section class="stsum"><div><span>販售金額</span><b>${money(x.amount)}</b></div><div><span>抽成</span><b>${money(x.commission)}</b></div><div><span>支付金額</span><b>${money(x.payout)}</b></div><div><span>LINE Pay</span><b>−${money(x.lpFee)}</b></div><div class="hl"><span>總轉帳金額</span><b>${money(x.net)}</b></div></section>
-    <h2>${y}/${mo} 銷售明細</h2>
+    <header class="sthead">${view.logo?`<img src="${esc(view.logo)}" alt="">`:""}<div><div class="kicker">旗時 · 永樂市場 2F 寄售結算單</div><h1>${esc(view.brand)}</h1><p>${multi?`${y} 年 ${esc(x0.period)}（${esc(x0.due)}付）`:`${y} 年 ${mn(x0.month)} 月 · 付款期 ${esc(x0.period)}（${esc(x0.due)}付）`}${xs.every(x=>x.paid)?` · <b class="ok">已付 ${esc(xl.paidOn||"")}</b>`:""}</p></div></header>
+    <section class="stsum"><div><span>販售金額</span><b>${money(tot("amount"))}</b></div><div><span>抽成</span><b>${money(tot("commission"))}</b></div><div><span>支付金額</span><b>${money(tot("payout"))}</b></div><div><span>LINE Pay</span><b>−${money(tot("lpFee"))}</b></div><div class="hl"><span>總轉帳金額</span><b>${money(tot("net"))}</b></div></section>
+    ${rows.length?`<h2>${tag} 銷售明細</h2>
     <table><thead><tr><th>日期</th><th class="l">銷售品項</th><th>販售金額</th><th>抽成</th><th>支付金額</th></tr></thead><tbody>
       ${rows.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.name)}${m.qty>1?` ×${fmtN(m.qty)}`:""}</td><td>${fmtN(m.amount)}</td><td>${fmtN(m.commission)}</td><td>${fmtN(m.payout)}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(x.count)} 件）</td><td>${fmtN(x.amount)}</td><td>${fmtN(x.commission)}</td><td>${fmtN(x.payout)}</td></tr></tfoot></table>
-    ${lp.length?`<h2>${y}/${mo} LINE Pay 費用</h2>
+      </tbody><tfoot><tr><td></td><td class="l">總額（${fmtN(rows.reduce((t,m)=>t+Number(m.qty||0),0))} 件）</td><td>${fmtN(rows.reduce((t,m)=>t+m.amount,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.commission,0))}</td><td>${fmtN(rows.reduce((t,m)=>t+m.payout,0))}</td></tr></tfoot></table>`:""}
+    ${lp.length?`<h2>${tag} LINE Pay 費用</h2>
     <table><thead><tr><th>日期</th><th class="l">消費項目</th><th>消費金額</th><th>手續費</th></tr></thead><tbody>
       ${lp.map(m=>`<tr><td>${md(m.at)}</td><td class="l">${esc(m.name)}</td><td>${fmtN(m.amount)}</td><td>${fmtN(Math.round(m.amount*3/100))}</td></tr>`).join("")}
-      </tbody><tfoot><tr><td></td><td class="l">合計</td><td>${fmtN(x.lpAmt)}</td><td>${fmtN(x.lpFee)}</td></tr></tfoot></table>`:""}
-    <h2>${y}/${mo} 總費用</h2>
-    <table class="sttot"><tbody><tr><th class="l">總費用</th><td>${fmtN(x.payout)}</td></tr><tr><th class="l">LINE Pay</th><td>${fmtN(x.lpFee)}</td></tr><tr class="hl"><th class="l">總轉帳金額</th><td>${fmtN(x.net)}</td></tr></tbody></table>
+      </tbody><tfoot><tr><td></td><td class="l">合計</td><td>${fmtN(tot("lpAmt"))}</td><td>${fmtN(tot("lpFee"))}</td></tr></tfoot></table>`:""}
+    <h2>${tag} 總費用</h2>
+    <table class="sttot"><tbody>${multi?xs.map(x=>`<tr><th class="l">${mn(x.month)} 月${x.manual?"（依紙本結算）":""}</th><td>${x.manual?fmtN(x.net):(x.lpFee?`${fmtN(x.payout)} − ${fmtN(x.lpFee)} ＝ ${fmtN(x.net)}`:fmtN(x.net))}</td></tr>`).join(""):`<tr><th class="l">總費用</th><td>${fmtN(tot("payout"))}</td></tr><tr><th class="l">LINE Pay</th><td>${fmtN(tot("lpFee"))}</td></tr>`}<tr class="hl"><th class="l">總轉帳金額</th><td>${fmtN(tot("net"))}</td></tr></tbody></table>
+    ${manual.length?`<p class="stfoot">${manual.map(x=>`${mn(x.month)} 月`).join("、")}是依紙本結算單記的金額，沒有逐筆明細。</p>`:""}
     <p class="stfoot">✿ 旗時 Chipao Moments · 永樂市場 2F ✿</p>
   </article>`;
   document.body.appendChild(ov); document.body.classList.add("stmt-open");
